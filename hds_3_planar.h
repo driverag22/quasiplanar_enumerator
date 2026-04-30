@@ -676,6 +676,7 @@ public:
 						  << "-" << tgt->vertex->label;
 			}
 			std::cerr << "\n\tto " << i->v << "\n";
+      std::cerr << "\n --------------------------- \n";
 		}
 	}
 
@@ -748,35 +749,22 @@ public:
 			if (v < vertices.size())
 				o << "v" << v; else o << "c" << v - vertices.size();
 			o << "\"";
-			std::string color = "3366FF";
+			std::string color; // >= 3 crossings: blue
 			std::string width = "1.5";
-			if (cr < 3) 
-			{
-				width = "2";
-				if (cr == 0) 
-				{
-					if (i->edge->ncr == 2) 
-					{			
-						color = "339966";
-						width = "3";
-					} 
-					else if (i->edge->ncr == 1) 
-					{
-						color = "993366";
-					} 
-					else
-						color = "99CC00";
-				} 
-				else if(cr == 1)
-				{
-					color = "993366";
-				}
-				else
-				{
-					color = "FF0000";
-				}
-					
-			}
+      if (cr == 0) {
+        color = "00CC00"; // Green
+      } else if (cr == 1) {
+        color = "FFCC00"; // Yellow
+      } else if (cr == 2) {
+        color = "FFA500"; // Orange
+      } else if (cr == 3) {
+        color = "FF0000"; // Red
+      } else if (cr == 4) {
+        color = "9933CC"; // Purple
+      } else {
+        color = "0000FF"; // Blue
+      }
+
 			o << ">\n"
 				<< "      <data key=\"d9\">\n"
 				<< "        <y:PolyLineEdge>\n"
