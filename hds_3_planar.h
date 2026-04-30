@@ -113,10 +113,10 @@ struct Drawing {
 	// n == #vertices
 	Drawing(std::size_t n) 
 	{
-    cross_mat.assign(64, 0); // init to 64 edges
 		vertices.reserve(n);
 		for (std::size_t i = 0; i < n; ++i)
 		    vertices.emplace_back((HdsHalfedge*)(0), i);
+    cross_mat.assign(64, 0); // init to 64 edges
 	}
 	
 	// copy constructor; many pointers, we have to recompute all of them
@@ -366,6 +366,7 @@ public:
 		// << pcr << ")" << std::endl;
 		edges.emplace_back(p[0]->vertex->label, v, p, pcr, edges.size());
 
+    // update cross_mat
     std::size_t new_label = edges.back().label;
     for (std::size_t i = 1; i < p.size(); ++i) {
       if (i < p.size() - 1 && p[i] != 0) {
@@ -413,7 +414,7 @@ public:
     // cross_mat cleanup
     std::size_t removed_label = edges.back().label;
     uint64_t crossed = cross_mat[removed_label];
-    for (int b = 0; b < 64; ++b) {
+    for (int b = 0; b < 64; ++b) { // hard-coded 64 edge limit
         if ((crossed >> b) & 1) {
             cross_mat[b] &= ~(1ULL << removed_label);
         }
@@ -536,8 +537,10 @@ private:
 			std::size_t e_new = p[ci]->edge->label; // edge we cross
 			for (std::size_t x = 1; x < ci; ++x) { // prev edgges
 				std::size_t e_old = p[x]->edge->label;
-				if ((cross_mat[e_new] & (1ULL << e_old)) != 0) 
-          qp_violation = true; break;
+				if ((cross_mat[e_new] & (1ULL << e_old)) != 0) {
+          qp_violation = true; 
+          break;
+        }
 			}
 			if (qp_violation) continue;
 
@@ -573,7 +576,7 @@ public:
 			p[1] = p[0] = p[0]->twin->prev;
 		}while (p[0] != end);
     // continue exploring with crossings, up to the (heuristic) depth limit
-		for(int cr = 1; cr <= kplane - pcr; cr++) {
+		for(std::size_t cr = 1; cr <= kplane - pcr; cr++) {
 			p.emplace_back();
 			do {
 				if (find_crossing(p, v, 1, kplane)) return p;
@@ -624,7 +627,7 @@ public:
 		}
 		
 		// if all start edges failed at current depth, increment crossing limit
-		for (int cr = p.size() - 1; cr <= kplane - pcr; cr++) {
+		for (std::size_t cr = p.size() - 1; cr <= kplane - pcr; cr++) {
 			p.emplace_back();
 			do {
 				if (find_crossing(p, v, 1, kplane)) return true;

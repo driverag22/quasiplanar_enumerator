@@ -8,24 +8,25 @@ typedef std::vector<Edge> Edges;
 
 // Example graph K_9
 // K_9 is not 3-planar
-const std::size_t n = 9;
+const std::size_t n = 5;
 const Edges edges =
 {
-    {0,1},{0,2},{0,3},{0,4},{0,5},{0,6},{0,7},{0,8},
-    {1,2},{1,3},{1,4},{1,5},{1,6},{1,7},{1,8},
-    {2,3},{2,4},{2,5},{2,6},{2,7},{2,8},
-    {3,4},{3,5},{3,6},{3,7},{3,8},
-    {4,5},{4,6},{4,7},{4,8},
-    {5,6},{5,7},{5,8},
-    {6,7},{6,8},
-    {7,8},
+    {0,1},{0,2},{0,3},{0,4},//{0,5},{0,6},{0,7},{0,8},
+    {1,2},{1,3},{1,4},//{1,5},{1,6},{1,7},{1,8},
+    {2,3},{2,4},//{2,5},{2,6},{2,7},{2,8},
+    {3,4},//{3,5},{3,6},{3,7},{3,8},
+    //{4,5},{4,6},{4,7},{4,8},
+    //{5,6},{5,7},{5,8},
+    //{6,7},{6,8},
+    //{7,8},
 };
+const std::size_t klim = 2;
 
 int main()
 {
     std::size_t minimal_cr = 0x3f3f3f3f;
-    std::vector< Drawing<3> > solutions;
-    Drawing<3> d(n);
+    std::vector< Drawing<klim> > solutions;
+    Drawing<klim> d(n);
     d.add_first_edge(edges[0][0], edges[0][1]);
     for (auto e = edges.begin() + 1;;)
     {
@@ -58,7 +59,8 @@ int main()
                 solutions.push_back(d);
                 minimal_cr = std::min(minimal_cr,d.crossings.size());
             }
-            goto BACKUP;
+            // goto BACKUP;
+            goto END;
         }
     }
     END:
@@ -69,8 +71,8 @@ int main()
 	}
     
     std::size_t cnt = 0;
-    std::vector< Drawing<3> > solutions_mincr_uni;
-    std::vector< Drawing<3>> solutions_mincr;
+    std::vector< Drawing<klim> > solutions_mincr_uni;
+    std::vector< Drawing<klim>> solutions_mincr;
     // Assume the graph has no more than 100 different crossing minimal drawings
     std::vector<std::size_t> d_cnt(100,1);
     for (auto it = solutions.begin();it!=solutions.end();it++)
@@ -97,7 +99,7 @@ int main()
                 solutions_mincr_uni.push_back((*it));
                 std::ofstream of;
                 std::ostringstream filename;
-                filename << "Drawing-" << solutions_mincr_uni.size() << ".graphml";
+                filename << "drawings/Drawing_" << klim << "_" << n << "_" << solutions_mincr_uni.size() << ".graphml";
                 of.open(filename.str());
                 (*it).graphml_output(of);
                 of.close();
