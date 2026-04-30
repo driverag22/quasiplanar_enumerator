@@ -6,29 +6,52 @@
 typedef std::vector<std::size_t> Edge;
 typedef std::vector<Edge> Edges;
 
-const std::size_t n = 10;
-const Edges edges =
-{
-    {0,1},{0,2},{0,3},{0,4},{0,5},{0,6},{0,7},{0,8},{0,9},
-    {1,2},{1,3},{1,4},{1,5},{1,6},{1,7},{1,8},{1,9},
-    {2,3},{2,4},{2,5},{2,6},{2,7},{2,8},{2,9},
-    {3,4},{3,5},{3,6},{3,7},{3,8},{3,9},
-    {4,5},{4,6},{4,7},{4,8},{6,9},
-    {5,6},{5,7},{5,8},{5,9},
-    {6,7},{6,8},{6,9},
-    {7,8},{7,9},
-    {8,9}
-};
+Edges generateCompleteGraph(std::size_t n) {
+  Edges edges;
+  edges.reserve(n * (n - 1) / 2);
+  for (std::size_t i = 0; i < n; ++i) {
+    for (std::size_t j = i + 1; j < n; ++j) {
+      edges.push_back({i, j});
+    }
+  }
+  return edges;
+}
+
+const std::size_t n = 9;
+// const Edges edges =
+// {
+//     {0,1},{0,2},{0,3},{0,4},{0,5},{0,6},{0,7},{0,8},{0,9},
+//     {1,2},{1,3},{1,4},{1,5},{1,6},{1,7},{1,8},{1,9},
+//     {2,3},{2,4},{2,5},{2,6},{2,7},{2,8},{2,9},
+//     {3,4},{3,5},{3,6},{3,7},{3,8},{3,9},
+//     {4,5},{4,6},{4,7},{4,8},{6,9},
+//     {5,6},{5,7},{5,8},{5,9},
+//     {6,7},{6,8},{6,9},
+//     {7,8},{7,9},
+//     {8,9}
+// };
 
 const std::size_t klim = 5;
 
 int main()
 {
+    const Edges edges = generateCompleteGraph(n);
     std::size_t minimal_cr = 0x3f3f3f3f;
     std::vector< Drawing<klim> > solutions;
     Drawing<klim> d(n);
     d.add_first_edge(edges[0][0], edges[0][1]);
-    for (auto e = edges.begin() + 1;;)
+    for (std::size_t i = 2; i < n; ++i) {
+      HdsPath p = d.first_path(0, i);
+      if (p.empty()) {
+        throw std::runtime_error("Failed to build the initial star!");
+      }
+      d.add_edge(p, i);
+    }
+    std::cout << "Star built" << std::endl;
+
+    auto start_edge = edges.begin() + (n-1);
+
+    for (auto e = start_edge;;)
     {
         std::size_t u = (*e)[0];
         std::size_t v = (*e)[1];
@@ -39,8 +62,10 @@ int main()
             // no way to add uv -> do previous edges differently
             do
             {
-                if (--e == edges.begin())
+                if (e == start_edge)
                     goto END;
+                --e;
+
                 u = (*e)[0];
                 assert(u == d.edges.back().u);
                 v = (*e)[1];
@@ -59,8 +84,8 @@ int main()
                 solutions.push_back(d);
                 minimal_cr = std::min(minimal_cr,d.crossings.size());
             }
-            // goto BACKUP;
-            goto END;
+            goto BACKUP;
+            // goto END;
         }
     }
     END:
@@ -103,10 +128,6 @@ int main()
                 of.open(filename.str());
                 (*it).graphml_output(of);
                 of.close();
-
-                std::cerr << "\nRecipe for Drawing-" << solutions_mincr_uni.size() << ":\n";
-                (*it).construction();
-                std::cerr << "--------------------------------------\n";
             }
         }
     }
