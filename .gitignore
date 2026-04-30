@@ -1,2 +1,4 @@
 .bin/
 drawings/
+out/
+*.slurm
