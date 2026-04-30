@@ -2,3 +2,5 @@
 drawings/
 out/
 *.slurm
+*.err
+*.log
