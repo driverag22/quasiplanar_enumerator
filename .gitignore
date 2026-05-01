@@ -1,6 +1,7 @@
 .bin/
 drawings/
-out/
 *.slurm
 *.err
 *.log
+.out/
+.out_err/
