@@ -471,14 +471,30 @@ public:
 			p[i] = p[i]->next;
 
       // avoid self-cross
+      std::vector<bool> jumped(i, false);
 			bool changed = true;
+
 			while (changed) {
 				changed = false;
+
 				for (std::size_t x = 1; x < i; ++x) {
+          if (jumped[x]) continue;
+
 					HdsHalfedge* v_start = (x == 1) ? p[0] : p[x-1]->twin;
 					HdsHalfedge* v_end = p[x];
-					if (p[i] == v_end) { p[i] = v_start; changed = true; }
-					else if (p[i] == v_start) { p[i] = v_end; changed = true; }
+
+          if (p[i] == v_end) { 
+            p[i] = v_start; 
+            jumped[x] = true;
+            changed = true; 
+            break;
+          }
+          else if (p[i] == v_start) { 
+            p[i] = v_end; 
+            jumped[x] = true;
+            changed = true; 
+            break;
+          }
 				}
 			}
 
@@ -503,14 +519,30 @@ private:
 			p[ci] = p[ci]->next;
 			
 			// "virtual" face boundaries (self-cross)
+      std::vector<bool> jumped(ci, false);
 			bool changed = true;
+
 			while (changed) {
 				changed = false;
+
 				for (std::size_t x = 1; x < ci; ++x) {
+          if (jumped[x]) continue;
+
 					HdsHalfedge* v_start = (x == 1) ? p[0] : p[x-1]->twin;
 					HdsHalfedge* v_end = p[x];
-					if (p[ci] == v_end) { p[ci] = v_start; changed = true; }
-					else if (p[ci] == v_start) { p[ci] = v_end; changed = true; }
+
+          if (p[ci] == v_end) { 
+            p[ci] = v_start; 
+            jumped[x] = true; // Mark as jumped
+            changed = true; 
+            break; // Restart the while loop safely
+          }
+          else if (p[ci] == v_start) { 
+            p[ci] = v_end; 
+            jumped[x] = true; // Mark as jumped
+            changed = true; 
+            break; // Restart the while loop safely
+          }
 				}
 			}
 			
@@ -630,7 +662,9 @@ public:
 		for (std::size_t cr = p.size() - 1; cr <= kplane - pcr; cr++) {
 			p.emplace_back();
 			do {
-				if (find_crossing(p, v, 1, kplane)) return true;
+				if (find_crossing(p, v, 1, kplane)) {
+          return true;
+        }
 				p[1] = p[0] = p[0]->twin->prev;
 			} while (p[0] != end);
 		}

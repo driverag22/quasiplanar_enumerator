@@ -1,7 +1,7 @@
 #ifndef ISO_HPP
 #define ISO_HPP
 
-#include "hds_3_planar.h"
+#include "hds_quasiplanar.h"
 #include <vector>
 #include <stdexcept>
 #include <queue>
