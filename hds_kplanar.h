@@ -444,31 +444,32 @@ public:
 		// walk p.back() around its face
 		std::size_t i = p.size()-1;
 		HdsHalfedge* end = (i == 1 ? p[0] : p[i-1]->twin);
+    std::vector<char> jumped(i, 0);
 		for (;;) 
 		{
 			p[i] = p[i]->next;
 
       // avoid self-cross
-      std::vector<bool> jumped(i, false);
+      std::fill(jumped.begin(), jumped.end(), 0);
 			bool changed = true;
 
-			while (changed) {
+			while (changed && i > 1) {
 				changed = false;
 
 				for (std::size_t x = i - 1; x > 0; --x) {
-          if (jumped[x]) continue;
+          if (jumped[x] == 1) continue;
 
 					HdsHalfedge* v_start = (x == 1) ? p[0] : p[x-1]->twin;
 					HdsHalfedge* v_end = p[x];
 
           if (p[i] == v_end) { 
             p[i] = v_start; 
-            jumped[x] = true;
+            jumped[x] = 1;
             changed = true; 
             break;
           } else if (p[i] == v_start) { 
             p[i] = v_end; 
-            jumped[x] = true;
+            jumped[x] = 1;
             changed = true; 
             break;
           }
@@ -491,32 +492,33 @@ private:
 		std::size_t u = p[0]->vertex->label;
 		HdsHalfedge* stop_condition = (ci == 1) ? p[0] : p[ci-1]->twin;
 		
+    std::vector<uint8_t> jumped(ci, 0);
 		for (;;) 
 		{
 			p[ci] = p[ci]->next;
+      std::fill(jumped.begin(), jumped.end(), 0);
 			
 			// "virtual" face boundaries (self-cross)
-      std::vector<bool> jumped(ci, false);
 			bool changed = true;
 
-			while (changed) {
+			while (changed && ci > 1) {
 				changed = false;
 
 				for (std::size_t x = ci - 1; x > 0; --x) {
-          if (jumped[x]) continue;
+          if (jumped[x] == 1) continue;
 
 					HdsHalfedge* v_start = (x == 1) ? p[0] : p[x-1]->twin;
 					HdsHalfedge* v_end = p[x];
 
           if (p[ci] == v_end) { 
             p[ci] = v_start; 
-            jumped[x] = true; // Mark as jumped
+            jumped[x] = 1; // Mark as jumped
             changed = true; 
             break; // Restart the while loop safely
           }
           else if (p[ci] == v_start) { 
             p[ci] = v_end; 
-            jumped[x] = true; // Mark as jumped
+            jumped[x] = 1; // Mark as jumped
             changed = true; 
             break; // Restart the while loop safely
           }
@@ -573,7 +575,7 @@ public:
 			p[1] = p[0] = p[0]->twin->prev;
 		}while (p[0] != end);
     // continue exploring with crossings, up to the (heuristic) depth limit
-		for(std::size_t cr = 1; cr <= kplane - pcr; cr++) {
+		for(std::size_t cr = 1; cr + pcr <= kplane; cr++) {
 			p.emplace_back();
 			do {
 				if (find_crossing(p, v, 1, kplane)) return p;
@@ -624,7 +626,7 @@ public:
 		}
 		
 		// if all start edges failed at current depth, increment crossing limit
-		for (std::size_t cr = p.size() - 1; cr <= kplane - pcr; cr++) {
+		for (std::size_t cr = p.size() - 1; cr + pcr <= kplane; cr++) {
 			p.emplace_back();
 			do {
 				if (find_crossing(p, v, 1, kplane)) {
