@@ -477,7 +477,7 @@ public:
 			while (changed) {
 				changed = false;
 
-				for (std::size_t x = 1; x < i; ++x) {
+				for (std::size_t x = i - 1; x > 0; --x) {
           if (jumped[x]) continue;
 
 					HdsHalfedge* v_start = (x == 1) ? p[0] : p[x-1]->twin;
@@ -488,8 +488,7 @@ public:
             jumped[x] = true;
             changed = true; 
             break;
-          }
-          else if (p[i] == v_start) { 
+          } else if (p[i] == v_start) { 
             p[i] = v_end; 
             jumped[x] = true;
             changed = true; 
@@ -525,7 +524,7 @@ private:
 			while (changed) {
 				changed = false;
 
-				for (std::size_t x = 1; x < ci; ++x) {
+				for (std::size_t x = ci - 1; x > 0; --x) {
           if (jumped[x]) continue;
 
 					HdsHalfedge* v_start = (x == 1) ? p[0] : p[x-1]->twin;
