@@ -36,7 +36,9 @@ const std::size_t klim = 6;
 
 int main()
 {
+    std::cout << "\n\n ===================================================== \n";
     const Edges edges = generateCompleteGraph(n);
+    std::cout << "k = " << klim << ", n = " << n << "\n" << std::endl;
     std::size_t minimal_cr = 0x3f3f3f3f;
     std::vector< Drawing<klim> > solutions;
     Drawing<klim> d(n);
@@ -125,7 +127,8 @@ int main()
                 solutions_mincr_uni.push_back((*it));
                 std::ofstream of;
                 std::ostringstream filename;
-                filename << "drawings/Drawing_" << klim << "_" << n << "_" << solutions_mincr_uni.size() << ".graphml";
+                //filename << "drawings/Drawing_" << klim << "_" << n << "_" << solutions_mincr_uni.size() << ".graphml";
+                filename << "drawings/Drawing_K" << n << "_" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
                 of.open(filename.str());
                 (*it).graphml_output(of);
                 of.close();
