@@ -34,7 +34,7 @@ struct HdsVertex
 //
 // To be able to remove edges, we store how they were inserted. This
 // is represented by a so-called creation path, which consists of
-// between two and five halfedges: The first halfedge points to the
+// between 2 and kplane + 2 halfedges: The first halfedge points to the
 // source vertex and the insertion position in the rotation at that
 // vertex; symmetrically, the last halfedge determines the target
 // vertex and the position of the inserted edge in the rotation there;
@@ -45,6 +45,21 @@ struct HdsVertex
 // the last halfedge of the creation path is 0 (null pointer).
 //
 // Specifically, for a creation path p of length l, we have:
+//
+// (1) If l == 2, either p[1] == 0 or:
+//    (a) p[0] and p[1] are on the same face of the drawing.
+//    (b) p[1] is not incident to the vertex that p[0] points to.
+//
+// (2) If l > 2, for every intermediate crossing step i (where 1 <= i <= l - 2):
+//    (a) The underlying edge of p[i] currently has strictly fewer than kplane crossings.
+//    (b) The "entry door" (which is p[0] if i==1, or p[i-1]->twin otherwise) and the 
+//        "exit door" p[i] are on the same face of the drawing.
+//    (c) The underlying edges of all crossed halfedges (p[1] through p[i]) are distinct  
+//        (i.e., a path cannot cross the same edge twice).
+//
+// (3) For the final step (reaching the target), either p[l-1] == 0, or:
+//    (a) p[l-2]->twin and p[l-1] are on the same face of the drawing.
+//    (b) p[l-1] is not incident to the vertex that p[0] points to.
 //
 // (1) l >= 2;
 // (2) either l == 2 and p[1] == 0 or
@@ -106,7 +121,7 @@ struct HdsEdge
 // elements. Insertion into a vector may lead to reallocation, which
 // invalidates *all* pointers into it.
 //
-// The parameter kplane should be 0, 1, 2 or 3.
+// The parameter kplane should be \geq 0.
 
 template < int kplane >
 struct Drawing {
@@ -547,14 +562,15 @@ private:
 			
 			if (p[ci] == stop_condition) break;
 			
-			bool invalid = false;
 
       // avoid crossing edges with overlapping nodes
 			if (p[ci]->edge->u == u || p[ci]->edge->u == v ||
 				p[ci]->edge->v == u || p[ci]->edge->v == v ||
         p[ci]->edge->ncr >= max_crossings) {
-				invalid = true;
+        continue;
 			}
+
+			bool invalid = false;
       // dont cross edge twice
 			for (std::size_t x = 1; x < ci; ++x) {
 				if (p[ci]->edge->label == p[x]->edge->label) {
