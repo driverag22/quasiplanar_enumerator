@@ -1,6 +1,8 @@
 #ifndef HDS_HPP
 #define HDS_HPP
 #include <vector>
+#include <map>
+#include <set>
 #include <list>
 #include <stdexcept>
 #include <algorithm>
@@ -902,12 +904,61 @@ public:
 		}
 		return true;
 	}
+
+  // Verifies if the current drawing is 3-quasiplanar, without using cross_mat.
+  // Returns true if NO three edges pairwise cross (triangle-free crossing graph).
+  bool verify_quasiplanarity() const {
+    std::size_t num_edges = edges.size();
+
+    // crossing_graph[i][j] == true if edge i and edge j cross
+    std::vector<std::vector<bool>> crossing_graph(num_edges, std::vector<bool>(num_edges, false));
+
+    // Map each crossing vertex pointer to the labels of the edges that pass through it
+    std::map<const HdsVertex*, std::set<std::size_t>> crossing_map;
+
+    for (const auto& edge : edges) {
+      for (std::size_t i = 0; i < edge.built.size(); ++i) {
+        const HdsHalfedge* he = edge.built[i];
+        if (!he) continue;
+
+        const HdsVertex* v = he->vertex;
+
+        // check if vertex is a crossing (labels start after original vertices)
+        if (v->label >= vertices.size()) crossing_map[v].insert(edge.label);
+      }
+    }
+
+    // build crossing graph
+    for (auto const& [vertex, edge_labels] : crossing_map) {
+      if (edge_labels.size() == 2) {
+        auto it = edge_labels.begin();
+        std::size_t e1 = *it;
+        std::size_t e2 = *(++it);
+        crossing_graph[e1][e2] = true;
+        crossing_graph[e2][e1] = true;
+      }
+    }
+
+    // check for triangle
+    for (std::size_t i = 0; i < num_edges; ++i) {
+      for (std::size_t j = i + 1; j < num_edges; ++j) {
+        if (crossing_graph[i][j]) {
+          for (std::size_t k = j + 1; k < num_edges; ++k) {
+            if (crossing_graph[i][k] && crossing_graph[j][k]) return false; 
+          }
+        }
+      }
+    }
+
+    return true;
+  }
+
 	std::vector<HdsVertex> vertices;
 	std::list<HdsVertex> crossings;
 	std::list<HdsHalfedge> halfedges;
 	std::list<HdsEdge> edges;
 
-  std::vector<uint64_t> cross_mat; // edge crossing matrix
+  std::vector<uint64_t> cross_mat; // edge crossing matrix, assumes at most 64 edges
 }
 ;
 
