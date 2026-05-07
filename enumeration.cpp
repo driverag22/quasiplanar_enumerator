@@ -1,5 +1,6 @@
 #include "hds_quasiplanar.h"
 //#include "hds_kplanar.h"
+//#include "hds_3_planar.h"
 #include "iso.h"
 #include <sstream>
 #include <fstream>
@@ -117,6 +118,9 @@ int main() {
                 }
             }
             if(is_unique) {
+		     if (!it->verify_quasiplanarity()) {
+			               std::cerr << "CRITICAL ERROR: Drawing is not 3-quasiplanar!" << std::endl;
+				               } else {
                 solutions_mincr_uni.push_back((*it));
                 std::ofstream of;
                 std::ostringstream filename;
@@ -125,14 +129,16 @@ int main() {
                 of.open(filename.str());
                 (*it).graphml_output(of);
                 of.close();
+					       }
             }
         }
     }
-    std::cout << "Found " << cnt << " drawings with Minimal Crossing in total." << std::endl;
-    std::cout << "Minimal Crossing Number is "<<minimal_cr<<std::endl;
-    std::cout << "Found " << solutions_mincr_uni.size() << " unique drawings with Minimal Crossing in total." << std::endl;
-    for (std::size_t i = 1; i <= solutions_mincr_uni.size(); i++) {
-        std::cout << "Drawing-" << i << " has " << d_cnt[i] << " isomorphic drawings" << std::endl;
-    }
-    return 0;
+  std::cout << "Found " << cnt << " drawings with Minimal Crossing in total." << std::endl;
+  std::cout << "Minimal Crossing Number is "<<minimal_cr<<std::endl;
+  std::cout << "Found " << solutions_mincr_uni.size() << " unique drawings with Minimal Crossing in total." << std::endl;
+  for (std::size_t i = 1; i <= solutions_mincr_uni.size(); i++)
+  {
+    std::cout << "Drawing-" << i << " has " << d_cnt[i] << " isomorphic drawings" << std::endl;
+  }
+  return 0;
 }
