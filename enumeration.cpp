@@ -19,29 +19,26 @@ Edges generateCompleteGraph(std::size_t n) {
     return edges;
 }
 
-const std::size_t n = 11;
-const std::string split = "211";
+const std::size_t n = 8;
+//const std::string split = "31";
 const Edges edges =
 {
-    {0,1},{0,2},{0,3},{0,4},{0,5},{0,6},{0,7},{0,8},//{0,9},{0,10},
-    {1,2},{1,3},{1,4},{1,5},{1,6},{1,7},{1,8},{1,9},//{1,10},
-    {2,3},{2,4},{2,5},{2,6},{2,7},{2,8},{2,9},//{2,10},
-    {3,4},{3,5},{3,6},{3,7},{3,8},{3,9},{3,10},
-    {4,5},{4,6},{4,7},{4,8},{4,9},{4,10},
-    {5,6},{5,7},{5,8},{5,9},{5,10},
-    {6,7},{6,8},{6,9},{6,10},
-    {7,8},{7,9},{7,10},
-    {8,9},{8,10},
-    {9,10}
+    {0,1},{0,2},{0,3},{0,4},{0,5},{0,6},{0,7},
+    {1,2},{1,3},{1,4},{1,6},{1,7},
+    {2,3},{2,4},{2,5},{2,6},{2,7},
+    {3,4},{3,5},{3,6},
+    {4,5},{4,6},{4,7},
+    {5,6},{5,7},
+    {6,7},
 };
 
-const std::size_t klim = 8;
+const std::size_t klim = 7;
 
 int main() {
     std::cout << "\n\n ===================================================== \n";
     //const Edges edges = generateCompleteGraph(n);
-    std::cout << "k = " << klim << ", n = " << n << ", split: " << split << std::endl;
-    //std::cout << "k = " << klim << ", n = " << n << std::endl;
+    //std::cout << "k = " << klim << ", n = " << n << ", split: " << split << std::endl;
+    std::cout << "max quasi, k = " << klim << ", n = " << n << std::endl;
     std::size_t minimal_cr = 0x3f3f3f3f;
     std::vector< Drawing<klim> > solutions;
     Drawing<klim> d(n);
@@ -85,8 +82,9 @@ BACKUP:
         if (++e == edges.end()) {
             solutions.push_back(d);
             minimal_cr = std::min(minimal_cr,d.crossings.size());
-            std::cout << "found sol\n";
+            //std::cout << "found sol\n";
             goto BACKUP;
+            //goto END;
         }
     }
 END:
@@ -102,7 +100,7 @@ END:
     std::vector<std::size_t> d_cnt(100,1);
     for (auto it = solutions.begin();it!=solutions.end();it++) {
         // Output all drawings with minimal crossings
-        if(it->crossings.size() == minimal_cr) {
+        //if(it->crossings.size() == minimal_cr) {
             cnt++;
             solutions_mincr.push_back((*it));
             bool is_unique = true;
@@ -121,28 +119,30 @@ END:
                     solutions_mincr_uni.push_back((*it));
                     std::ofstream of;
                     std::ostringstream filename;
-                    filename << "drawings/fail_Drawing_S" << n << "_k" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
+                    filename << "drawings/fail_Drawing_maxQuasi" << n << "_k" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
                     //filename << "drawings/K11_minus_4/NOTQUASI_" << split << "_drawing_K" << n << "_" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
                     of.open(filename.str());
                     (*it).graphml_output(of);
                     of.close();
                 } else {
-                    solutions_mincr_uni.push_back((*it));
-                    std::ofstream of;
-                    std::ostringstream filename;
-                    filename << "drawings/Drawing_S" << n << "_k" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
-                    //filename << "drawings/K11_minus_4/4_drawing_K" << n << "_" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
-                    //filename << "drawings/K11_minus_4/" << split << "_drawing_K" << n << "_" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
-                    of.open(filename.str());
-                    (*it).graphml_output(of);
-                    of.close();
+                solutions_mincr_uni.push_back((*it));
+                std::ofstream of;
+                std::ostringstream filename;
+                filename << "drawings/Drawing_maxQuasi" << n << "_k" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
+                //filename << "drawings/K11_minus_4/4_drawing_K" << n << "_" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
+                //filename << "drawings/K11_minus_4/" << split << "_drawing_K" << n << "_" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
+                of.open(filename.str());
+                (*it).graphml_output(of);
+                of.close();
                 }
             }
-        }
+        //}
     }
-    std::cout << "Found " << cnt << " drawings with Minimal Crossing in total." << std::endl;
+    //std::cout << "Found " << cnt << " drawings with Minimal Crossing in total." << std::endl;
+    std::cout << "Found " << cnt << " drawings in total." << std::endl;
     std::cout << "Minimal Crossing Number is "<<minimal_cr<<std::endl;
-    std::cout << "Found " << solutions_mincr_uni.size() << " unique drawings with Minimal Crossing in total." << std::endl;
+    //std::cout << "Found " << solutions_mincr_uni.size() << " unique drawings with Minimal Crossing in total." << std::endl;
+    std::cout << "Found " << solutions_mincr_uni.size() << " unique drawings in total." << std::endl;
     for (std::size_t i = 1; i <= solutions_mincr_uni.size(); i++)
     {
         std::cout << "Drawing-" << i << " has " << d_cnt[i] << " isomorphic drawings" << std::endl;
