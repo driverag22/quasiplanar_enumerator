@@ -19,20 +19,22 @@ Edges generateCompleteGraph(std::size_t n) {
     return edges;
 }
 
-const std::size_t n = 8;
+const std::size_t n = 10;
 //const std::string split = "31";
 const Edges edges =
 {
-    {0,1},{0,2},{0,3},{0,4},{0,5},{0,6},{0,7},
-    {1,2},{1,3},{1,4},{1,6},{1,7},
-    {2,3},{2,4},{2,5},{2,6},{2,7},
-    {3,4},{3,5},{3,6},
-    {4,5},{4,6},{4,7},
+    {0,1},{0,2},{0,3},{0,7},{0,8},{0,9},
+    {1,2},{1,3},{1,6},{1,7},{1,8},{1,9},
+    {2,3},{2,4},{2,5},{2,6},{2,9},
+    {3,4},{3,5},{3,8},{3,9},
+    {4,5},{4,6},{4,7},{4,8},
     {5,6},{5,7},
-    {6,7},
+    {6,7},{6,8},{6,9},
+    {7,8},{7,9},
+    {8,9},
 };
 
-const std::size_t klim = 7;
+const std::size_t klim = 6;
 
 int main() {
     std::cout << "\n\n ===================================================== \n";
@@ -57,6 +59,7 @@ int main() {
     auto start_edge = edges.begin() + 1;
     //int counter = 0;
 
+    bool first = true;
     for (auto e = start_edge;;) {
         std::size_t u = (*e)[0];
         std::size_t v = (*e)[1];
@@ -81,8 +84,8 @@ BACKUP:
         d.add_edge(p, v);
         if (++e == edges.end()) {
             solutions.push_back(d);
+            if (first) std::cout << "found sol" << std::endl;
             minimal_cr = std::min(minimal_cr,d.crossings.size());
-            //std::cout << "found sol\n";
             goto BACKUP;
             //goto END;
         }
