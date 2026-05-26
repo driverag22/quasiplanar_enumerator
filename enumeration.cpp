@@ -47,7 +47,7 @@ int main() {
     //std::cout << "K11 minus star 4, k = " << klim << ", n = " << n << std::endl;
     std::size_t minimal_cr = 0x3f3f3f3f;
     std::vector< Drawing<klim> > solutions;
-    std::vector<std::size_t> d_cnt(500,1);
+    std::vector<std::size_t> d_cnt(1000,1);
 
     Drawing<klim> d(n);
     d.add_first_edge(edges[0][0], edges[0][1]);
@@ -65,7 +65,7 @@ int main() {
     //auto start_edge = edges.begin() + 1;
 
     int counter = 0;
-    bool firstSol = true;
+    //bool firstSol = true;
     for (auto e = start_edge;;) {
         std::size_t u = (*e)[0];
         std::size_t v = (*e)[1];
@@ -92,12 +92,12 @@ BACKUP:
             bool newSol = true;
             std::size_t d_ind = 0;
             for (auto it = solutions.begin(); it != solutions.end(); it++) {
-                d_ind++;
                 if(are_isomorphic((*it),d)) {
                     newSol = false;
                     d_cnt[d_ind]++;
                     break;
                 }
+                d_ind++;
             }
             if (newSol) {
                 solutions.push_back(d);
@@ -117,7 +117,6 @@ END:
 
     std::size_t idx = 0;
     for (auto it = solutions.begin();it!=solutions.end();it++) {
-        idx++;
         if (!it->verify_quasiplanarity()) {
             std::cerr << "CRITICAL ERROR: Drawing is not 3-quasiplanar!" << std::endl;
             std::ofstream of;
@@ -139,13 +138,13 @@ END:
             (*it).graphml_output(of);
             of.close();
         }
+        idx++;
     }
     std::cout << "Found " << counter << " drawings in total." << std::endl;
     std::cout << "Found " << solutions.size() << " unique drawings in total." << std::endl;
     std::cout << "Minimal Crossing Number is "<<minimal_cr<<std::endl;
 
-    for (std::size_t i = 1; i <= solutions.size(); i++)
-    {
+    for (std::size_t i = 0; i < solutions.size(); i++) {
         std::cout << "Drawing-" << i << " has " << d_cnt[i] << " isomorphic drawings" << std::endl;
     }
     return 0;
