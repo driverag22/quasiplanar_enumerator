@@ -19,7 +19,7 @@ Edges generateCompleteGraph(std::size_t n) {
     return edges;
 }
 
-const std::size_t n = 8;
+const std::size_t n = 7;
 //const std::string split = "c4";
 //const Edges edges =
 //{
@@ -37,7 +37,7 @@ const std::size_t n = 8;
 //    {9,10}
 //};
 
-const std::size_t klim = 12;
+const std::size_t klim = 9;
 
 int main() {
     std::cout << "\n\n ===================================================== \n";
@@ -47,7 +47,7 @@ int main() {
     //std::cout << "K11 minus star 4, k = " << klim << ", n = " << n << std::endl;
     std::size_t minimal_cr = 0x3f3f3f3f;
     std::vector< Drawing<klim> > solutions;
-    std::vector<std::size_t> d_cnt(1000,1);
+    std::vector<std::size_t> d_cnt(10000,1);
 
     Drawing<klim> d(n);
     d.add_first_edge(edges[0][0], edges[0][1]);
@@ -119,25 +119,26 @@ END:
     for (auto it = solutions.begin();it!=solutions.end();it++) {
         if (!it->verify_quasiplanarity()) {
             std::cerr << "CRITICAL ERROR: Drawing is not 3-quasiplanar!" << std::endl;
-            std::ofstream of;
-            std::ostringstream filename;
-            //filename << "drawings/fail_Drawing_maxQuasi" << n << "_k" << klim << "_" << idx << ".graphml";
-            //filename << "drawings/K11_minus_4/NOTQUASI_" << split << "_drawing_K" << n << "_" << klim << "_" << idx << ".graphml";
-            filename << "drawings/fail_K" << n << "_k" << klim << "_" << idx << ".graphml";
-            of.open(filename.str());
-            (*it).graphml_output(of);
-            of.close();
-        } else {
-            std::ofstream of;
-            std::ostringstream filename;
-            //filename << "drawings/Drawing_maxQuasi" << n << "_k" << klim << "_" << idx << ".graphml";
-            filename << "drawings/K" << n << "_k" << klim << "_" << idx << ".graphml";
-            //filename << "drawings/K11_minus_4/4_drawing_K" << n << "_" << klim << "_" << idx << ".graphml";
-            //filename << "drawings/K11_minus_4/" << split << "_drawing_K" << n << "_" << klim << "_" << idx << ".graphml";
-            of.open(filename.str());
-            (*it).graphml_output(of);
-            of.close();
-        }
+            //std::ofstream of;
+            //std::ostringstream filename;
+            ////filename << "drawings/fail_Drawing_maxQuasi" << n << "_k" << klim << "_" << idx << ".graphml";
+            ////filename << "drawings/K11_minus_4/NOTQUASI_" << split << "_drawing_K" << n << "_" << klim << "_" << idx << ".graphml";
+            //filename << "drawings/K6/fail_K" << n << "_k" << klim << "_" << idx << ".graphml";
+            //of.open(filename.str());
+            //(*it).graphml_output(of);
+            //of.close();
+        } 
+        //else {
+        //    std::ofstream of;
+        //    std::ostringstream filename;
+        //    //filename << "drawings/Drawing_maxQuasi" << n << "_k" << klim << "_" << idx << ".graphml";
+        //    filename << "drawings/K6/K" << n << "_k" << klim << "_" << idx << ".graphml";
+        //    //filename << "drawings/K11_minus_4/4_drawing_K" << n << "_" << klim << "_" << idx << ".graphml";
+        //    //filename << "drawings/K11_minus_4/" << split << "_drawing_K" << n << "_" << klim << "_" << idx << ".graphml";
+        //    of.open(filename.str());
+        //    (*it).graphml_output(of);
+        //    of.close();
+        //}
         idx++;
     }
     std::cout << "Found " << counter << " drawings in total." << std::endl;
