@@ -19,7 +19,7 @@ Edges generateCompleteGraph(std::size_t n) {
     return edges;
 }
 
-const std::size_t n = 10;
+const std::size_t n = 7;
 //const std::string split = "c4";
 //const Edges edges =
 //{
@@ -37,7 +37,7 @@ const std::size_t n = 10;
 //    {9,10}
 //};
 
-const std::size_t klim = 18;
+const std::size_t klim = 9;
 
 int main() {
     std::cout << "\n\n ===================================================== \n";
@@ -101,9 +101,21 @@ BACKUP:
             }
             if (newSol) {
                 solutions.push_back(d);
-                //if (firstSol) { std::cout << "found sol" << std::endl; firstSol = false; }
-                minimal_cr = std::min(minimal_cr,d.crossings.size());
                 std::cout << ++counter << std::endl;
+                if(!d.verify_quasiplanarity()) {
+                    std::cerr << "CRITICAL ERROR: Drawing is not 3-quasiplanar!" << std::endl;
+                    std::ofstream of;
+                    std::ostringstream filename;
+                    //filename << "drawings/fail_Drawing_maxQuasi" << n << "_k" << klim << "_" << idx << ".graphml";
+                    //filename << "drawings/K11_minus_4/NOTQUASI_" << split << "_drawing_K" << n << "_" << klim << "_" << idx << ".graphml";
+                    filename << "drawings/K7_notQuasi/fail_K" << n << "_k" << klim << "_" << counter << ".graphml";
+                    of.open(filename.str());
+                    d.graphml_output(of);
+                    of.close();
+                    return 0;
+                }
+                //if (firstSol) { std::cout << "found sol" << std::endl; firstSol = false; }
+                // minimal_cr = std::min(minimal_cr,d.crossings.size());
             }
             goto BACKUP;
             //goto END;
@@ -115,38 +127,38 @@ END:
         return 0;
     }
 
-    // std::size_t idx = 0;
-    for (auto it = solutions.begin();it!=solutions.end();it++) {
-        if (!it->verify_quasiplanarity()) {
-            std::cerr << "CRITICAL ERROR: Drawing is not 3-quasiplanar!" << std::endl;
-            //std::ofstream of;
-            //std::ostringstream filename;
-            ////filename << "drawings/fail_Drawing_maxQuasi" << n << "_k" << klim << "_" << idx << ".graphml";
-            ////filename << "drawings/K11_minus_4/NOTQUASI_" << split << "_drawing_K" << n << "_" << klim << "_" << idx << ".graphml";
-            //filename << "drawings/K6/fail_K" << n << "_k" << klim << "_" << idx << ".graphml";
-            //of.open(filename.str());
-            //(*it).graphml_output(of);
-            //of.close();
-        } 
-        //else {
-        //    std::ofstream of;
-        //    std::ostringstream filename;
-        //    //filename << "drawings/Drawing_maxQuasi" << n << "_k" << klim << "_" << idx << ".graphml";
-        //    filename << "drawings/K6/K" << n << "_k" << klim << "_" << idx << ".graphml";
-        //    //filename << "drawings/K11_minus_4/4_drawing_K" << n << "_" << klim << "_" << idx << ".graphml";
-        //    //filename << "drawings/K11_minus_4/" << split << "_drawing_K" << n << "_" << klim << "_" << idx << ".graphml";
-        //    of.open(filename.str());
-        //    (*it).graphml_output(of);
-        //    of.close();
-        //}
-        // idx++;
-    }
+    //std::size_t idx = 0;
+    //for (auto it = solutions.begin();it!=solutions.end();it++) {
+    //    if (!it->verify_quasiplanarity()) {
+    //        std::cerr << "CRITICAL ERROR: Drawing is not 3-quasiplanar!" << std::endl;
+    //        std::ofstream of;
+    //        std::ostringstream filename;
+    //        //filename << "drawings/fail_Drawing_maxQuasi" << n << "_k" << klim << "_" << idx << ".graphml";
+    //        //filename << "drawings/K11_minus_4/NOTQUASI_" << split << "_drawing_K" << n << "_" << klim << "_" << idx << ".graphml";
+    //        filename << "drawings/K7_notQuasi/fail_K" << n << "_k" << klim << "_" << idx << ".graphml";
+    //        of.open(filename.str());
+    //        (*it).graphml_output(of);
+    //        of.close();
+    //    } 
+    //    //else {
+    //    //    std::ofstream of;
+    //    //    std::ostringstream filename;
+    //    //    //filename << "drawings/Drawing_maxQuasi" << n << "_k" << klim << "_" << idx << ".graphml";
+    //    //    filename << "drawings/K4/K" << n << "_k" << klim << "_" << idx << ".graphml";
+    //    //    //filename << "drawings/K11_minus_4/4_drawing_K" << n << "_" << klim << "_" << idx << ".graphml";
+    //    //    //filename << "drawings/K11_minus_4/" << split << "_drawing_K" << n << "_" << klim << "_" << idx << ".graphml";
+    //    //    of.open(filename.str());
+    //    //    (*it).graphml_output(of);
+    //    //    of.close();
+    //    //}
+    //     idx++;
+    //}
     std::cout << "Found " << counter << " drawings in total." << std::endl;
     std::cout << "Found " << solutions.size() << " unique drawings in total." << std::endl;
     std::cout << "Minimal Crossing Number is "<<minimal_cr<<std::endl;
 
-    for (std::size_t i = 0; i < solutions.size(); i++) {
-        std::cout << "Drawing-" << i << " has " << d_cnt[i] << " isomorphic drawings" << std::endl;
-    }
+    // for (std::size_t i = 0; i < solutions.size(); i++) {
+    //     std::cout << "Drawing-" << i << " has " << d_cnt[i] << " isomorphic drawings" << std::endl;
+    // }
     return 0;
 }

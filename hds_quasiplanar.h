@@ -917,25 +917,17 @@ public:
     std::map<const HdsVertex*, std::set<std::size_t>> crossing_map;
 
     for (const auto& edge : edges) {
-      for (std::size_t i = 0; i < edge.built.size(); ++i) {
+      if (edge.built.size() < 3) continue; // uncrossed edge
+      
+      // indices 1 to size() - 2 represent crossings
+      for (std::size_t i = 1; i <= edge.built.size() - 2; ++i) {
         const HdsHalfedge* he = edge.built[i];
-        if (!he) continue;
-
-        const HdsVertex* v = he->vertex;
-
-        // check if vertex is a crossing (labels start after original vertices)
-        if (v->label >= vertices.size()) crossing_map[v].insert(edge.label);
-      }
-    }
-
-    // build crossing graph
-    for (auto const& [vertex, edge_labels] : crossing_map) {
-      if (edge_labels.size() == 2) {
-        auto it = edge_labels.begin();
-        std::size_t e1 = *it;
-        std::size_t e2 = *(++it);
-        crossing_graph[e1][e2] = true;
-        crossing_graph[e2][e1] = true;
+        if (he && he->edge) {
+          std::size_t e1 = edge.label;
+          std::size_t e2 = he->edge->label;
+          crossing_graph[e1][e2] = true;
+          crossing_graph[e2][e1] = true;
+        }
       }
     }
 
@@ -944,7 +936,16 @@ public:
       for (std::size_t j = i + 1; j < num_edges; ++j) {
         if (crossing_graph[i][j]) {
           for (std::size_t k = j + 1; k < num_edges; ++k) {
-            if (crossing_graph[i][k] && crossing_graph[j][k]) return false; 
+            if (crossing_graph[i][k] && crossing_graph[j][k]) {
+                auto it_i = std::next(edges.begin(), i);
+                auto it_j = std::next(edges.begin(), j);
+                auto it_k = std::next(edges.begin(), k);
+                std::cout << "Quasiplanarity violation by " << i << " " << j <<  " " << k << ":\n";
+                std::cout << it_i->u << " to " << it_i->v << "\n";
+                std::cout << it_j->u << " to " << it_j->v << "\n";
+                std::cout << it_k->u << " to " << it_k->v << std::endl;
+                return false; 
+            }
           }
         }
       }
