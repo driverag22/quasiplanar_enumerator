@@ -19,7 +19,7 @@ Edges generateCompleteGraph(std::size_t n) {
     return edges;
 }
 
-const std::size_t n = 7;
+const std::size_t n = 10;
 //const std::string split = "c4";
 //const Edges edges =
 //{
@@ -37,7 +37,7 @@ const std::size_t n = 7;
 //    {9,10}
 //};
 
-const std::size_t klim = 9;
+const std::size_t klim = 18;
 
 int main() {
     std::cout << "\n\n ===================================================== \n";
@@ -103,7 +103,7 @@ BACKUP:
                 solutions.push_back(d);
                 //if (firstSol) { std::cout << "found sol" << std::endl; firstSol = false; }
                 minimal_cr = std::min(minimal_cr,d.crossings.size());
-                counter++; std::cout << counter << "\n";
+                std::cout << ++counter << std::endl;
             }
             goto BACKUP;
             //goto END;
@@ -115,7 +115,7 @@ END:
         return 0;
     }
 
-    std::size_t idx = 0;
+    // std::size_t idx = 0;
     for (auto it = solutions.begin();it!=solutions.end();it++) {
         if (!it->verify_quasiplanarity()) {
             std::cerr << "CRITICAL ERROR: Drawing is not 3-quasiplanar!" << std::endl;
@@ -139,7 +139,7 @@ END:
         //    (*it).graphml_output(of);
         //    of.close();
         //}
-        idx++;
+        // idx++;
     }
     std::cout << "Found " << counter << " drawings in total." << std::endl;
     std::cout << "Found " << solutions.size() << " unique drawings in total." << std::endl;
