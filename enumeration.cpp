@@ -47,6 +47,7 @@ int main() {
     //std::cout << "K11 minus star 4, k = " << klim << ", n = " << n << std::endl;
     std::size_t minimal_cr = 0x3f3f3f3f;
     std::vector< Drawing<klim> > solutions;
+    std::vector<std::size_t> d_cnt(500,1);
     Drawing<klim> d(n);
     d.add_first_edge(edges[0][0], edges[0][1]);
     std::size_t num_fixed_edges = n;
@@ -87,10 +88,22 @@ BACKUP:
         }
         d.add_edge(p, v);
         if (++e == edges.end()) {
-            solutions.push_back(d);
-            //if (firstSol) { std::cout << "found sol" << std::endl; firstSol = false; }
-            minimal_cr = std::min(minimal_cr,d.crossings.size());
-            counter++; std::cout << counter << "\n";
+            bool newSol = true;
+            std::size_t d_ind = 0;
+            for (auto it = solutions.begin(); it != solutions.end(); it++) {
+                if(are_isomorphic((*it),d)) {
+                    newSol = false;
+                    d_cnt[d_ind]++;
+                    break;
+                }
+                d_ind++;
+            }
+            if (newSol) {
+                solutions.push_back(d);
+                //if (firstSol) { std::cout << "found sol" << std::endl; firstSol = false; }
+                minimal_cr = std::min(minimal_cr,d.crossings.size());
+                counter++; std::cout << counter << "\n";
+            }
             goto BACKUP;
             //goto END;
         }
@@ -101,61 +114,39 @@ END:
         return 0;
     }
 
-    std::size_t cnt = 0;
-    std::vector< Drawing<klim> > solutions_mincr_uni;
-    std::vector< Drawing<klim>> solutions_mincr;
-    // Assume the graph has no more than 400 different crossing minimal drawings
-    std::vector<std::size_t> d_cnt(400,1);
+    std::size_t idx = 0;
     for (auto it = solutions.begin();it!=solutions.end();it++) {
-        // Output all drawings with minimal crossings
-        //if(it->crossings.size() == minimal_cr) {
-            cnt++;
-            solutions_mincr.push_back((*it));
-            bool is_unique = true;
-            std::size_t d_ind = 0;
-            for(auto iit = solutions_mincr_uni.begin();iit!=solutions_mincr_uni.end();iit++) {
-                d_ind++;
-                if(are_isomorphic((*it),(*iit))) {
-                    is_unique = false;
-                    d_cnt[d_ind]++;
-                    break;
-                }
-            }
-            if(is_unique) {
-                if (!it->verify_quasiplanarity()) {
-                    std::cerr << "CRITICAL ERROR: Drawing is not 3-quasiplanar!" << std::endl;
-                    solutions_mincr_uni.push_back((*it));
-                    std::ofstream of;
-                    std::ostringstream filename;
-                    //filename << "drawings/fail_Drawing_maxQuasi" << n << "_k" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
-                    //filename << "drawings/K11_minus_4/NOTQUASI_" << split << "_drawing_K" << n << "_" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
-                    filename << "drawings/fail_K" << n << "_k" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
-                    of.open(filename.str());
-                    (*it).graphml_output(of);
-                    of.close();
-                } else {
-                solutions_mincr_uni.push_back((*it));
-                std::ofstream of;
-                std::ostringstream filename;
-                //filename << "drawings/Drawing_maxQuasi" << n << "_k" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
-                filename << "drawings/K" << n << "_k" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
-                //filename << "drawings/K11_minus_4/4_drawing_K" << n << "_" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
-                //filename << "drawings/K11_minus_4/" << split << "_drawing_K" << n << "_" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
-                of.open(filename.str());
-                (*it).graphml_output(of);
-                of.close();
-                }
-            }
-        //}
+        idx++;
+        if (!it->verify_quasiplanarity()) {
+            std::cerr << "CRITICAL ERROR: Drawing is not 3-quasiplanar!" << std::endl;
+            std::ofstream of;
+            std::ostringstream filename;
+            //filename << "drawings/fail_Drawing_maxQuasi" << n << "_k" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
+            //filename << "drawings/K11_minus_4/NOTQUASI_" << split << "_drawing_K" << n << "_" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
+            filename << "drawings/fail_K" << n << "_k" << klim << "_" << idx << ".graphml";
+            of.open(filename.str());
+            (*it).graphml_output(of);
+            of.close();
+        } else {
+            std::ofstream of;
+            std::ostringstream filename;
+            //filename << "drawings/Drawing_maxQuasi" << n << "_k" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
+            filename << "drawings/K" << n << "_k" << klim << "_" << idx << ".graphml";
+            //filename << "drawings/K11_minus_4/4_drawing_K" << n << "_" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
+            //filename << "drawings/K11_minus_4/" << split << "_drawing_K" << n << "_" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
+            of.open(filename.str());
+            (*it).graphml_output(of);
+            of.close();
+        }
     }
     //std::cout << "Found " << cnt << " drawings with Minimal Crossing in total." << std::endl;
     //std::cout << "Minimal Crossing Number is "<<minimal_cr<<std::endl;
     //std::cout << "Found " << solutions_mincr_uni.size() << " unique drawings with Minimal Crossing in total." << std::endl;
 
-    std::cout << "Found " << cnt << " drawings in total." << std::endl;
-    std::cout << "Found " << solutions_mincr_uni.size() << " unique drawings in total." << std::endl;
+    std::cout << "Found " << counter << " drawings in total." << std::endl;
+    std::cout << "Found " << solutions.size() << " unique drawings in total." << std::endl;
 
-    for (std::size_t i = 1; i <= solutions_mincr_uni.size(); i++)
+    for (std::size_t i = 1; i <= solutions.size(); i++)
     {
         std::cout << "Drawing-" << i << " has " << d_cnt[i] << " isomorphic drawings" << std::endl;
     }
