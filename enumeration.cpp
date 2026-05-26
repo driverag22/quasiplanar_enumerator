@@ -19,49 +19,51 @@ Edges generateCompleteGraph(std::size_t n) {
     return edges;
 }
 
-const std::size_t n = 12;
-//const std::string split = "31";
-const Edges edges =
-{
-    {0,1},{0,2},{0,3},{0,4},{0,5},{0,9},{0,10},{0,11},
-    {1,2},{1,3},{1,4},{1,8},{1,9},{1,10},{1,11},
-    {2,3},{2,4},{2,5},{2,7},{2,8},{2,11},
-    {3,4},{3,5},{3,6},{3,7},{3,10},{3,11},
-    {4,5},{4,6},{4,7},{4,9},{4,10},
-    {5,6},{5,7},{5,8},{5,9},{5,11},
-    {6,7},{6,8},{6,9},{6,10},{6,11},
-    {7,8},{7,9},{7,10},
-    {8,9},{8,10},{8,11},
-    {9,10},{9,11},
-    {10,11}
-};
+const std::size_t n = 7;
+//const std::string split = "c4";
+//const Edges edges =
+//{
+//    {0,1},{0,2},{0,3},{0,4},{0,5},{0,6},{0,7},{0,8},{0,9},{0,10},
+//    //{1,2},
+//    {1,3},{1,4},{1,5},{1,6},{1,7},{1,8},{1,9},//{1,10},
+//    //{2,3},
+//    {2,4},{2,5},{2,6},{2,7},{2,8},{2,9},{2,10},
+//    {3,4},{3,5},{3,6},{3,7},{3,8},{3,9},//{3,10},
+//    {4,5},{4,6},{4,7},{4,8},{4,9},{4,10},
+//    {5,6},{5,7},{5,8},{5,9},{5,10},
+//    {6,7},{6,8},{6,9},{6,10},
+//    {7,8},{7,9},{7,10},
+//    {8,9},{8,10},
+//    {9,10}
+//};
 
-const std::size_t klim = 6;
+const std::size_t klim = 9;
 
 int main() {
     std::cout << "\n\n ===================================================== \n";
-    //const Edges edges = generateCompleteGraph(n);
+    const Edges edges = generateCompleteGraph(n);
     //std::cout << "k = " << klim << ", n = " << n << ", split: " << split << std::endl;
-    std::cout << "max quasi, k = " << klim << ", n = " << n << std::endl;
+    std::cout << "k = " << klim << ", complete n = " << n << std::endl;
+    //std::cout << "K11 minus star 4, k = " << klim << ", n = " << n << std::endl;
     std::size_t minimal_cr = 0x3f3f3f3f;
     std::vector< Drawing<klim> > solutions;
     Drawing<klim> d(n);
     d.add_first_edge(edges[0][0], edges[0][1]);
-    //std::size_t num_fixed_edges = n;
-    //for (std::size_t i = 2; i < num_fixed_edges; ++i) {
-    //    HdsPath p = d.first_path(0, i);
-    //    if (p.empty()) {
-    //        throw std::runtime_error("Failed to build the initial star!");
-    //    }
-    //    d.add_edge(p, i);
-    //}
-    //std::cout << "Star built" << std::endl;
+    std::size_t num_fixed_edges = n;
+    for (std::size_t i = 2; i < num_fixed_edges; ++i) {
+        HdsPath p = d.first_path(0, i);
+        if (p.empty()) {
+            throw std::runtime_error("Failed to build the initial star!");
+        }
+        d.add_edge(p, i);
+    }
+    std::cout << "Star built" << std::endl;
 
-    //auto start_edge = edges.begin() + (num_fixed_edges-1);
-    auto start_edge = edges.begin() + 1;
-    //int counter = 0;
+    auto start_edge = edges.begin() + (num_fixed_edges-1);
+    //auto start_edge = edges.begin() + 1;
+    int counter = 0;
 
-    bool first = true;
+    //bool firstSol = true;
     for (auto e = start_edge;;) {
         std::size_t u = (*e)[0];
         std::size_t v = (*e)[1];
@@ -86,8 +88,9 @@ BACKUP:
         d.add_edge(p, v);
         if (++e == edges.end()) {
             solutions.push_back(d);
-            if (first) { std::cout << "found sol" << std::endl; first = false; }
+            //if (firstSol) { std::cout << "found sol" << std::endl; firstSol = false; }
             minimal_cr = std::min(minimal_cr,d.crossings.size());
+            counter++; std::cout << counter << "\n";
             goto BACKUP;
             //goto END;
         }
@@ -101,8 +104,8 @@ END:
     std::size_t cnt = 0;
     std::vector< Drawing<klim> > solutions_mincr_uni;
     std::vector< Drawing<klim>> solutions_mincr;
-    // Assume the graph has no more than 100 different crossing minimal drawings
-    std::vector<std::size_t> d_cnt(100,1);
+    // Assume the graph has no more than 400 different crossing minimal drawings
+    std::vector<std::size_t> d_cnt(400,1);
     for (auto it = solutions.begin();it!=solutions.end();it++) {
         // Output all drawings with minimal crossings
         //if(it->crossings.size() == minimal_cr) {
@@ -124,8 +127,9 @@ END:
                     solutions_mincr_uni.push_back((*it));
                     std::ofstream of;
                     std::ostringstream filename;
-                    filename << "drawings/fail_Drawing_maxQuasi" << n << "_k" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
+                    //filename << "drawings/fail_Drawing_maxQuasi" << n << "_k" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
                     //filename << "drawings/K11_minus_4/NOTQUASI_" << split << "_drawing_K" << n << "_" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
+                    filename << "drawings/fail_K" << n << "_k" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
                     of.open(filename.str());
                     (*it).graphml_output(of);
                     of.close();
@@ -133,7 +137,8 @@ END:
                 solutions_mincr_uni.push_back((*it));
                 std::ofstream of;
                 std::ostringstream filename;
-                filename << "drawings/Drawing_maxQuasi" << n << "_k" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
+                //filename << "drawings/Drawing_maxQuasi" << n << "_k" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
+                filename << "drawings/K" << n << "_k" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
                 //filename << "drawings/K11_minus_4/4_drawing_K" << n << "_" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
                 //filename << "drawings/K11_minus_4/" << split << "_drawing_K" << n << "_" << klim << "_" << solutions_mincr_uni.size() << ".graphml";
                 of.open(filename.str());
@@ -144,10 +149,12 @@ END:
         //}
     }
     //std::cout << "Found " << cnt << " drawings with Minimal Crossing in total." << std::endl;
-    std::cout << "Found " << cnt << " drawings in total." << std::endl;
-    std::cout << "Minimal Crossing Number is "<<minimal_cr<<std::endl;
+    //std::cout << "Minimal Crossing Number is "<<minimal_cr<<std::endl;
     //std::cout << "Found " << solutions_mincr_uni.size() << " unique drawings with Minimal Crossing in total." << std::endl;
+
+    std::cout << "Found " << cnt << " drawings in total." << std::endl;
     std::cout << "Found " << solutions_mincr_uni.size() << " unique drawings in total." << std::endl;
+
     for (std::size_t i = 1; i <= solutions_mincr_uni.size(); i++)
     {
         std::cout << "Drawing-" << i << " has " << d_cnt[i] << " isomorphic drawings" << std::endl;
