@@ -19,31 +19,32 @@ Edges generateCompleteGraph(std::size_t n) {
     return edges;
 }
 
-const std::size_t n = 7;
-//const std::string split = "c4";
-//const Edges edges =
-//{
-//    {0,1},{0,2},{0,3},{0,4},{0,5},{0,6},{0,7},{0,8},{0,9},{0,10},
-//    //{1,2},
-//    {1,3},{1,4},{1,5},{1,6},{1,7},{1,8},{1,9},//{1,10},
-//    //{2,3},
-//    {2,4},{2,5},{2,6},{2,7},{2,8},{2,9},{2,10},
-//    {3,4},{3,5},{3,6},{3,7},{3,8},{3,9},//{3,10},
-//    {4,5},{4,6},{4,7},{4,8},{4,9},{4,10},
-//    {5,6},{5,7},{5,8},{5,9},{5,10},
-//    {6,7},{6,8},{6,9},{6,10},
-//    {7,8},{7,9},{7,10},
-//    {8,9},{8,10},
-//    {9,10}
-//};
+const std::size_t n = 11;
+const std::string split = "3t1i";
+const Edges edges =
+{
+    {0,1},{0,2},{0,3},{0,4},{0,5},{0,6},{0,7},{0,8},{0,9},{0,10},
+    //{1,2}, {1,3},
+    {1,4},{1,5},{1,6},{1,7},{1,8},{1,9},{1,10},
+    //{2,3},
+    {2,4},{2,5},{2,6},{2,7},{2,8},{2,9},{2,10},
+    {3,4},{3,5},{3,6},{3,7},{3,8},{3,9},{3,10},
+    //{4,5},
+    {4,6},{4,7},{4,8},{4,9},{4,10},
+    {5,6},{5,7},{5,8},{5,9},{5,10},
+    {6,7},{6,8},{6,9},{6,10},
+    {7,8},{7,9},{7,10},
+    {8,9},{8,10},
+    {9,10}
+};
 
-const std::size_t klim = 9;
+const std::size_t klim = 10;
 
 int main() {
     std::cout << "\n\n ===================================================== \n";
     const Edges edges = generateCompleteGraph(n);
-    //std::cout << "k = " << klim << ", n = " << n << ", split: " << split << std::endl;
-    std::cout << "k = " << klim << ", complete n = " << n << std::endl;
+    std::cout << "k = " << klim << ", n = " << n << ", split: " << split << std::endl;
+    //std::cout << "k = " << klim << ", complete n = " << n << std::endl;
     //std::cout << "K11 minus star 4, k = " << klim << ", n = " << n << std::endl;
     std::size_t minimal_cr = 0x3f3f3f3f;
     std::vector< Drawing<klim> > solutions;
@@ -51,18 +52,18 @@ int main() {
 
     Drawing<klim> d(n);
     d.add_first_edge(edges[0][0], edges[0][1]);
-    std::size_t num_fixed_edges = n;
-    for (std::size_t i = 2; i < num_fixed_edges; ++i) {
-        HdsPath p = d.first_path(0, i);
-        if (p.empty()) {
-            throw std::runtime_error("Failed to build the initial star!");
-        }
-        d.add_edge(p, i);
-    }
-    std::cout << "Star built" << std::endl;
+    //std::size_t num_fixed_edges = n;
+    //for (std::size_t i = 2; i < num_fixed_edges; ++i) {
+    //    HdsPath p = d.first_path(0, i);
+    //    if (p.empty()) {
+    //        throw std::runtime_error("Failed to build the initial star!");
+    //    }
+    //    d.add_edge(p, i);
+    //}
+    //std::cout << "Star built" << std::endl;
 
-    auto start_edge = edges.begin() + (num_fixed_edges-1);
-    //auto start_edge = edges.begin() + 1;
+    //auto start_edge = edges.begin() + (num_fixed_edges-1);
+    auto start_edge = edges.begin() + 1;
 
     int counter = 0;
     //bool firstSol = true;
@@ -106,9 +107,9 @@ BACKUP:
                     std::cerr << "CRITICAL ERROR: Drawing is not 3-quasiplanar!" << std::endl;
                     std::ofstream of;
                     std::ostringstream filename;
-                    //filename << "drawings/fail_Drawing_maxQuasi" << n << "_k" << klim << "_" << idx << ".graphml";
-                    //filename << "drawings/K11_minus_4/NOTQUASI_" << split << "_drawing_K" << n << "_" << klim << "_" << idx << ".graphml";
-                    filename << "drawings/K7_notQuasi/fail_K" << n << "_k" << klim << "_" << counter << ".graphml";
+                    //filename << "drawings/fail_Drawing_maxQuasi" << n << "_k" << klim << "_" << counter << ".graphml";
+                    filename << "drawings/K11_minus_4/NOTQUASI_" << split << "_drawing_K" << n << "_" << klim << "_" <<  counter << ".graphml";
+                    //filename << "drawings/K7_notQuasi/fail_K" << n << "_k" << klim << "_" << counter << ".graphml";
                     of.open(filename.str());
                     d.graphml_output(of);
                     of.close();
@@ -127,38 +128,25 @@ END:
         return 0;
     }
 
-    //std::size_t idx = 0;
-    //for (auto it = solutions.begin();it!=solutions.end();it++) {
-    //    if (!it->verify_quasiplanarity()) {
-    //        std::cerr << "CRITICAL ERROR: Drawing is not 3-quasiplanar!" << std::endl;
-    //        std::ofstream of;
-    //        std::ostringstream filename;
-    //        //filename << "drawings/fail_Drawing_maxQuasi" << n << "_k" << klim << "_" << idx << ".graphml";
-    //        //filename << "drawings/K11_minus_4/NOTQUASI_" << split << "_drawing_K" << n << "_" << klim << "_" << idx << ".graphml";
-    //        filename << "drawings/K7_notQuasi/fail_K" << n << "_k" << klim << "_" << idx << ".graphml";
-    //        of.open(filename.str());
-    //        (*it).graphml_output(of);
-    //        of.close();
-    //    } 
-    //    //else {
-    //    //    std::ofstream of;
-    //    //    std::ostringstream filename;
-    //    //    //filename << "drawings/Drawing_maxQuasi" << n << "_k" << klim << "_" << idx << ".graphml";
-    //    //    filename << "drawings/K4/K" << n << "_k" << klim << "_" << idx << ".graphml";
-    //    //    //filename << "drawings/K11_minus_4/4_drawing_K" << n << "_" << klim << "_" << idx << ".graphml";
-    //    //    //filename << "drawings/K11_minus_4/" << split << "_drawing_K" << n << "_" << klim << "_" << idx << ".graphml";
-    //    //    of.open(filename.str());
-    //    //    (*it).graphml_output(of);
-    //    //    of.close();
-    //    //}
-    //     idx++;
-    //}
+    std::size_t idx = 0;
+    for (auto it = solutions.begin();it!=solutions.end();it++) {
+        std::ofstream of;
+        std::ostringstream filename;
+        //filename << "drawings/Drawing_maxQuasi" << n << "_k" << klim << "_" << idx << ".graphml";
+        //filename << "drawings/K4/K" << n << "_k" << klim << "_" << idx << ".graphml";
+        //filename << "drawings/K11_minus_4/4_drawing_K" << n << "_" << klim << "_" << idx << ".graphml";
+        filename << "drawings/K11_minus_4/" << split << "_drawing_K" << n << "_" << klim << "_" << idx << ".graphml";
+        of.open(filename.str());
+        (*it).graphml_output(of);
+        of.close();
+        idx++;
+    }
     std::cout << "Found " << counter << " drawings in total." << std::endl;
     std::cout << "Found " << solutions.size() << " unique drawings in total." << std::endl;
     std::cout << "Minimal Crossing Number is "<<minimal_cr<<std::endl;
 
-    // for (std::size_t i = 0; i < solutions.size(); i++) {
-    //     std::cout << "Drawing-" << i << " has " << d_cnt[i] << " isomorphic drawings" << std::endl;
-    // }
+    for (std::size_t i = 0; i < solutions.size(); i++) {
+        std::cout << "Drawing-" << i << " has " << d_cnt[i] << " isomorphic drawings" << std::endl;
+    }
     return 0;
 }
