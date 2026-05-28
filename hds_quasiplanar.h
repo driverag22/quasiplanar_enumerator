@@ -608,6 +608,36 @@ private:
 		return false;
 	}
 
+    // Helper backtracking function for the matching verification
+    bool find_matching_dfs(const std::vector<const HdsEdge*>& uncrossed, 
+            std::vector<bool>& vertex_used, 
+            std::size_t edge_idx, 
+            std::size_t current_size, 
+            std::size_t target_size) const {
+        if (current_size == target_size) return true; // base case
+        if (edge_idx >= uncrossed.size()) return false; // out of edges
+
+        // if the remaining edges aren't enough to reach the target, return
+        if (current_size + (uncrossed.size() - edge_idx) < target_size) return false;
+
+        const HdsEdge* e = uncrossed[edge_idx];
+
+        // option 1: include edge in the matching (if both endpoints are free)
+        if (!vertex_used[e->u] && !vertex_used[e->v]) {
+            vertex_used[e->u] = true;
+            vertex_used[e->v] = true;
+
+            if (find_matching_dfs(uncrossed, vertex_used, edge_idx + 1, current_size + 1, target_size)) return true;
+
+            // Backtrack
+            vertex_used[e->u] = false;
+            vertex_used[e->v] = false;
+        }
+
+        // option 2: skip edge
+        return find_matching_dfs(uncrossed, vertex_used, edge_idx + 1, current_size, target_size);
+    }
+
 public:
 	// try to build a first creation path for an edge from u to v with c
 	// prescribed (artificial) crossings; return the path, or an empty
@@ -917,7 +947,7 @@ public:
     std::map<const HdsVertex*, std::set<std::size_t>> crossing_map;
 
     for (const auto& edge : edges) {
-      if (edge.built.size() < 3) continue; // uncrossed edge
+      if (edge.ncr == 0) continue; // uncrossed edge
       
       // indices 1 to size() - 2 represent crossings
       for (std::size_t i = 1; i <= edge.built.size() - 2; ++i) {
@@ -954,10 +984,45 @@ public:
     return true;
   }
 
-	std::vector<HdsVertex> vertices;
-	std::list<HdsVertex> crossings;
-	std::list<HdsHalfedge> halfedges;
-	std::list<HdsEdge> edges;
+  // Returns true if at least n-1 vertices are incident on an uncrossed edge
+  bool verify_vertex_non_crossing_edge() const {
+    std::size_t n = vertices.size();
+    std::vector<bool> has_uncrossed(n, false);
+
+    for (const auto& edge : edges) {
+        if (edge.ncr == 0) {
+            has_uncrossed[edge.u] = 1;
+            has_uncrossed[edge.v] = 1;
+        }
+    }
+    std::size_t covered_vertices = std::count(has_uncrossed.begin(), has_uncrossed.end(), true);
+
+    return covered_vertices >= n - 1;
+  }
+
+  // Returns true if the current drawing contains a matching of non-crossing edges.
+  bool verify_non_crossing_matching() const {
+    std::size_t n = vertices.size();
+    std::size_t target_size = n/2;
+
+    std::vector<const HdsEdge*> uncrossed_edges;
+    // get uncrossed edges
+    for (const auto& edge : edges) {
+        if (edge.ncr == 0) uncrossed_edges.push_back(&edge);
+    }
+
+    if (uncrossed_edges.size() < target_size) return false;
+
+    std::vector<bool> vertex_used(n,false);
+
+    // backtracking to find matching
+    return find_matching_dfs(uncrossed_edges, vertex_used, 0, 0, target_size);
+  }
+
+  std::vector<HdsVertex> vertices;
+  std::list<HdsVertex> crossings;
+  std::list<HdsHalfedge> halfedges;
+  std::list<HdsEdge> edges;
 
   std::vector<uint64_t> cross_mat; // edge crossing matrix, assumes at most 64 edges
 }
