@@ -114,7 +114,7 @@ END:
     for (auto it = solutions.begin();it!=solutions.end();it++) {
         std::string filename = "K10_" + std::to_string(idx) + ".json";
         std::ofstream of_json(filename);
-        nlohmann::json output_json = (*it).serialize_to_json();
+        nlohmann::ordered_json output_json = (*it).serialize_to_json();
         of_json << output_json.dump(4);
         of_json.close();
         idx++;
