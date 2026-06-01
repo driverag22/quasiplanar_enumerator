@@ -1,6 +1,5 @@
 #include "hds_quasiplanar.h"
 //#include "hds_kplanar.h"
-//#include "hds_3_planar.h"
 #include "iso.h"
 #include <sstream>
 #include <fstream>
