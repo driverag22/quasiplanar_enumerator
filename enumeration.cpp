@@ -1,7 +1,7 @@
 #include "hds_quasiplanar.h"
 //#include "hds_kplanar.h"
 #include "iso.h"
-#include <sstream>
+//#include <sstream>
 #include <fstream>
 
 typedef std::vector<std::size_t> Edge;

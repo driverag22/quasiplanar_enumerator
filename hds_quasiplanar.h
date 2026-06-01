@@ -244,10 +244,8 @@ struct Drawing {
                     }
                 }
 
-                if (!p0) {
-                    throw std::runtime_error("Deserialization error: could not find start_after_edge ID " + 
-                            std::to_string(start_after) + " at vertex " + std::to_string(u));
-                }
+                if (!p0) {throw std::runtime_error("Deserialization error: could not find start_after_edge ID " + 
+                            std::to_string(start_after) + " at vertex " + std::to_string(u));}
 
                 HdsPath p;
                 p.push_back(p0);
@@ -268,7 +266,7 @@ struct Drawing {
                     HdsHalfedge* found_crossing = nullptr;
                     HdsHalfedge* start_face = face_runner;
 
-                    // walk around face (mirrors find_crossing())
+                    // walk around face until we find edge to cross
                     do {
                         face_runner = face_runner->next;
                         if (face_runner->edge == target_cross_edge) {
@@ -277,10 +275,8 @@ struct Drawing {
                         }
                     } while (face_runner != start_face);
 
-                    if (!found_crossing) {
-                        throw std::runtime_error("Deserialization error: could not find crossed edge ID " + 
-                                std::to_string(crossed_label) + " along the current face boundary.");
-                    }
+                    if (!found_crossing) {throw std::runtime_error("Deserialization error: could not find crossed edge ID " + 
+                                std::to_string(crossed_label) + " along the current face boundary.");}
 
                     p.push_back(found_crossing);
                     // after crossing, enter the adjacent face via the twin halfedge
@@ -303,10 +299,8 @@ struct Drawing {
                         }
                     } while (face_runner != start_face);
 
-                    if (!found_target) {
-                        throw std::runtime_error("Deserialization error: could not find target vertex " + 
-                                std::to_string(v) + " in the current face, from: " + std::to_string(u));
-                    }
+                    if (!found_target) {throw std::runtime_error("Deserialization error: could not find target vertex " + 
+                                std::to_string(v) + " in the current face, from: " + std::to_string(u));}
                     p.push_back(found_target);
                 }
 
@@ -1148,7 +1142,7 @@ public:
     for (const auto& edge : edges) {
       std::size_t low = std::min(edge.u, edge.v);
       std::size_t high = std::max(edge.u, edge.v);
-      j_graph.push_back({low, high});
+      j_graph.push_back(nlohmann::json::array_t{low, high});
     }
     return j_graph;
   }
@@ -1188,8 +1182,8 @@ public:
     return j_recipe;
   }
 
-  nlohmann::json serialize_to_json() const {
-    nlohmann::json root;
+  nlohmann::ordered_json serialize_to_json() const {
+    nlohmann::ordered_json root;
 
     root["kplane"] = kplane;
     root["num_vertices"] = vertices.size();
