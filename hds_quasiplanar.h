@@ -10,6 +10,7 @@
 #include <string>
 #include <cassert> 
 #include <stdint.h>
+#include <nlohmann/json.hpp>
 
 // classic Halfedge Data Structure
 
@@ -695,6 +696,7 @@ public:
 		
 		// all crossings failed for current start edge, try a new start edge
 		if (p.size() > 2) {
+            p.resize(2); // remove stale crossing elements
 			for (;;) {
 				p[1] = p[0] = p[0]->twin->prev;
 				if (p[0] == end) break;
@@ -943,22 +945,20 @@ public:
     // crossing_graph[i][j] == true if edge i and edge j cross
     std::vector<std::vector<bool>> crossing_graph(num_edges, std::vector<bool>(num_edges, false));
 
-    // Map each crossing vertex pointer to the labels of the edges that pass through it
-    std::map<const HdsVertex*, std::set<std::size_t>> crossing_map;
+    for (const auto& crossing : crossings) {
+        HdsHalfedge* e0 = crossing.halfedge;
+        if (!e0 || !e0->edge) continue;
+        
+        HdsHalfedge* e1 = e0->twin->prev; // the intersecting path choice
+        if (!e1 || !e1->edge) continue;
 
-    for (const auto& edge : edges) {
-      if (edge.ncr == 0) continue; // uncrossed edge
-      
-      // indices 1 to size() - 2 represent crossings
-      for (std::size_t i = 1; i <= edge.built.size() - 2; ++i) {
-        const HdsHalfedge* he = edge.built[i];
-        if (he && he->edge) {
-          std::size_t e1 = edge.label;
-          std::size_t e2 = he->edge->label;
-          crossing_graph[e1][e2] = true;
-          crossing_graph[e2][e1] = true;
+        std::size_t label1 = e0->edge->label;
+        std::size_t label2 = e1->edge->label;
+
+        if (label1 < num_edges && label2 < num_edges) {
+            crossing_graph[label1][label2] = true;
+            crossing_graph[label2][label1] = true;
         }
-      }
     }
 
     // check for triangle
@@ -1017,6 +1017,62 @@ public:
 
     // backtracking to find matching
     return find_matching_dfs(uncrossed_edges, vertex_used, 0, 0, target_size);
+  }
+
+  // Extract abstract graph as a list of canonical, sorted edges
+  nlohmann::json extract_abstract_graph() const {
+    nlohmann::json j_graph = nlohmann::json::array();
+    for (const auto& edge : edges) {
+      std::size_t low = std::min(edge.u, edge.v);
+      std::size_t high = std::max(edge.u, edge.v);
+      j_graph.push_back({low, high});
+    }
+    return j_graph;
+  }
+
+  // Extract the order and topological context of edge insertions
+  nlohmann::json extract_drawing_recipe() const {
+    nlohmann::json j_recipe = nlohmann::json::array();
+
+    for (const auto& edge : edges) {
+      nlohmann::json step;
+      step["edge_label"] = edge.label;
+      step["u"] = edge.u;
+      step["v"] = edge.v;
+
+      if (edge.label == 0) {
+        step["is_first_edge"] = true;
+      } else {
+        step["is_first_edge"] = false;
+
+        // edge.built[0] points to the halfedge we insert after clockwise
+        if (edge.built.empty() || edge.built[0] == nullptr || edge.built[0]->edge == nullptr) {
+          throw std::runtime_error("Malformed creation path at edge " + std::to_string(edge.label));
+        }
+        step["start_after_edge"] = edge.built[0]->edge->label;
+
+        // get crossed halfedges (from 1 to edge.built.size()-1)
+        auto crossed_arr = nlohmann::json::array();
+        for (std::size_t j = 1; j < edge.built.size() - 1; ++j) {
+          if (edge.built[j] != nullptr && edge.built[j]->edge != nullptr) {
+            crossed_arr.push_back(edge.built[j]->edge->label);
+          }
+        }
+        step["crossed_edges"] = crossed_arr;
+      }
+      j_recipe.push_back(step);
+    }
+    return j_recipe;
+  }
+
+  nlohmann::json serialize_to_json() const {
+    nlohmann::json root;
+
+    root["kplane"] = kplane;
+    root["num_vertices"] = vertices.size();
+    root["abstract_graph"] = extract_abstract_graph();
+    root["drawing_recipe"] = extract_drawing_recipe();
+    return root;
   }
 
   std::vector<HdsVertex> vertices;

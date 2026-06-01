@@ -612,6 +612,7 @@ public:
 		
 		// all crossings failed for current start edge, try a new start edge
 		if (p.size() > 2) {
+            p.resize(2); // remove stale crossing elements
 			for (;;) {
 				p[1] = p[0] = p[0]->twin->prev;
 				if (p[0] == end) break;

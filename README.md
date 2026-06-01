@@ -9,3 +9,35 @@ and $k$-planar graphs (for arbitrary $k$).
  - The file `hds_quasiplanar.h` contains the code to enumerate quasiplanar graphs with local crossing number $k\geq0$ (parameter).
 
 The local crossing number (`klim`) controls the depth of the recurrence: the higher `klim` the more branching the algorithm do.
+
+# JSON drawing representation
+
+Created drawings can be saved into a JSON format that describes the drawing. 
+From it the drawing can be recreated by hand, or reloaded in the code as a `Drawing` struct.
+
+The function `hds_quasiplanar/serialize_to_json()` generates the JSON object using the `nlohmann` library, which can then be saved as a 
+JSON file using `nlohmann::json/dump()`.
+
+The function `hds_quasiplanar/...` loads the drawing from the JSON file
+
+## JSON format
+
+First the abstract graph is described, giving the list of edges, described by the two endpoints:
+
+```json
+"abstract_graph": [ [0,1], [0,2], ...]
+```
+
+The edges are ordered lexicographically.
+
+Then the drawing recipe is given. It describes how to draw the edges in order, meaning that one can just follow the list from top to bottom 
+to draw the graph by hand.
+
+For the first edge it contains the edge label and the two endpoints `u,v`.
+
+For subsequent edges it contains a unique label, the labels of edges it crosses, the endpoints `u` and `v`, and label of the edge it "starts after" in the counter-clockwise rotation around `u`.
+Note that therefore the start after edge is also incident on `u`.
+
+This drawing_recipe follows the same order as the code itself when constructing a new drawing.
+
+The `kplane` and `num_vertices` of the drawing is also given. Note that `kplane` is not the local crossing number of the drawing, but the `klim` that the code was subject to when it constructed the drawing (so the local crossing number is at most `kplane`, but could be less)

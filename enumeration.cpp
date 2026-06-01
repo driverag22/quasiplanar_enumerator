@@ -19,7 +19,7 @@ Edges generateCompleteGraph(std::size_t n) {
     return edges;
 }
 
-const std::size_t n = 8;
+const std::size_t n = 5; // note hard-coded limit of 64 edges for quasiplanar...
 //const std::string split = "3t1i";
 //const Edges edges =
 //{
@@ -38,17 +38,17 @@ const std::size_t n = 8;
 //    {9,10}
 //};
 
-const std::size_t klim = 12;
+const std::size_t klim = 2;
 
 int main() {
     std::cout << "\n\n ===================================================== \n";
     const Edges edges = generateCompleteGraph(n);
-    //std::cout << "k = " << klim << ", n = " << n << ", split: " << split << std::endl;
-    std::cout << "k = " << klim << ", complete n = " << n << std::endl;
+    //std::cout << "klim = " << klim << ", n = " << n << ", split: " << split << std::endl;
+    //std::cout << "klim = " << klim << ", complete n = " << n << std::endl;
     //std::cout << "K11 minus star 4, k = " << klim << ", n = " << n << std::endl;
     std::size_t minimal_cr = 0x3f3f3f3f;
     std::vector< Drawing<klim> > solutions;
-    std::vector<std::size_t> d_cnt(10000,1);
+    std::vector<std::size_t> d_cnt(10000,1); // assume no more than 10000 unique drawings up to iso
 
     Drawing<klim> d(n);
     d.add_first_edge(edges[0][0], edges[0][1]);
@@ -63,7 +63,7 @@ int main() {
     std::cout << "Star built" << std::endl;
 
     auto start_edge = edges.begin() + (num_fixed_edges-1);
-    //auto start_edge = edges.begin() + 1;
+    // auto start_edge = edges.begin() + 1;
 
     int counter = 0;
     //bool firstSol = true;
@@ -90,37 +90,56 @@ BACKUP:
         }
         d.add_edge(p, v);
         if (++e == edges.end()) {
-            bool newSol = true;
-            std::size_t d_ind = 0;
-            for (auto it = solutions.begin(); it != solutions.end(); it++) {
-                if(are_isomorphic((*it),d)) {
-                    newSol = false;
-                    d_cnt[d_ind]++;
-                    break;
-                }
-                d_ind++;
+            nlohmann::json export_data = d.serialize_to_json();
+            std::string filename = "test_drawing.json";
+            std::ofstream output_file(filename);
+            if (output_file.is_open()) {
+                output_file << export_data.dump(4); // 4-space indentation
+                output_file.close();
+                std::cout << "Success! Saved layout cleanly to: " << filename << std::endl;
+            } else {
+                std::cerr << "Error: Could not open " << filename << " for writing." << std::endl;
+                return 1;
             }
-            if (newSol) {
-                solutions.push_back(d);
-                ++counter;
-                //std::cout << ++counter << std::endl;
-                if(!d.verify_quasiplanarity()) {
-                    std::cerr << "CRITICAL ERROR: Drawing is not 3-quasiplanar!" << std::endl;
-                    std::ofstream of;
-                    std::ostringstream filename;
-                    //filename << "drawings/fail_Drawing_maxQuasi" << n << "_k" << klim << "_" << counter << ".graphml";
-                    //filename << "drawings/K11_minus_4/NOTQUASI_" << split << "_drawing_K" << n << "_" << klim << "_" <<  counter << ".graphml";
-                    //filename << "drawings/K7_notQuasi/fail_K" << n << "_k" << klim << "_" << counter << ".graphml";
-                    filename << "drawings/K8/failQuasi_K" << n << "_k" << klim << "_" << counter << ".graphml";
-                    of.open(filename.str());
-                    d.graphml_output(of);
-                    of.close();
-                    return 0;
-                }
-                //if (firstSol) { std::cout << "found sol" << std::endl; firstSol = false; }
-                // minimal_cr = std::min(minimal_cr,d.crossings.size());
-            }
-            goto BACKUP;
+
+            std::ofstream of;
+            std::ostringstream filename2;
+            filename2 << "test.graphml";
+            of.open(filename2.str());
+            d.graphml_output(of);
+            of.close();
+            return 0;
+            //bool newSol = true;
+            //std::size_t d_ind = 0;
+            //for (auto it = solutions.begin(); it != solutions.end(); it++) {
+            //    if(are_isomorphic((*it),d)) {
+            //        newSol = false;
+            //        d_cnt[d_ind]++;
+            //        break;
+            //    }
+            //    d_ind++;
+            //}
+            //if (newSol) {
+            //    solutions.push_back(d);
+            //    // ++counter;
+            //    std::cout << ++counter << std::endl;
+            //    //if(!d.verify_quasiplanarity()) {
+            //    //    std::cerr << "CRITICAL ERROR: Drawing is not 3-quasiplanar!" << std::endl;
+            //    //    std::ofstream of;
+            //    //    std::ostringstream filename;
+            //    //    //filename << "drawings/fail_Drawing_maxQuasi" << n << "_k" << klim << "_" << counter << ".graphml";
+            //    //    //filename << "drawings/K11_minus_4/NOTQUASI_" << split << "_drawing_K" << n << "_" << klim << "_" <<  counter << ".graphml";
+            //    //    //filename << "drawings/K7_notQuasi/fail_K" << n << "_k" << klim << "_" << counter << ".graphml";
+            //    //    filename << "drawings/K8/failQuasi_K" << n << "_k" << klim << "_" << counter << ".graphml";
+            //    //    of.open(filename.str());
+            //    //    d.graphml_output(of);
+            //    //    of.close();
+            //    //    return 0;
+            //    //}
+            //    //if (firstSol) { std::cout << "found sol" << std::endl; firstSol = false; }
+            //    // minimal_cr = std::min(minimal_cr,d.crossings.size());
+            //}
+            //goto BACKUP;
         }
     }
 END:
