@@ -23,7 +23,7 @@ int main() {
 
   // output json
   std::ofstream of_json("K9_test.json");
-  nlohmann::json output_json = loaded_drawing.serialize_to_json();
+  nlohmann::ordered_json output_json = loaded_drawing.serialize_to_json();
   of_json << output_json.dump(4);
   of_json.close();
 
