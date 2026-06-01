@@ -18,7 +18,7 @@ From it the drawing can be recreated by hand, or reloaded in the code as a `Draw
 The function `hds_quasiplanar/serialize_to_json()` generates the JSON object using the `nlohmann` library, which can then be saved as a 
 JSON file using `nlohmann::json/dump()`.
 
-The function `hds_quasiplanar/...` loads the drawing from the JSON file
+When constructing a new `Drawing` struct, one can pass a `nlohmann::json` object, and the drawing will then follow the recipe specified by the json file to make the drawing.
 
 ## JSON format
 
@@ -40,4 +40,5 @@ Note that therefore the start after edge is also incident on `u`.
 
 This drawing_recipe follows the same order as the code itself when constructing a new drawing.
 
-The `kplane` and `num_vertices` of the drawing is also given. Note that `kplane` is not the local crossing number of the drawing, but the `klim` that the code was subject to when it constructed the drawing (so the local crossing number is at most `kplane`, but could be less)
+The `kplane` and `num_vertices` of the drawing is also given. 
+Note that `kplane` is not necessarily the local crossing number of the drawing, but the `klim` that the code was subject to when it constructed the drawing (so the local crossing number is at most `kplane`, but could be less).

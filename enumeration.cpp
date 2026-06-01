@@ -19,7 +19,7 @@ Edges generateCompleteGraph(std::size_t n) {
     return edges;
 }
 
-const std::size_t n = 5; // note hard-coded limit of 64 edges for quasiplanar...
+const std::size_t n = 10; // note hard-coded limit of 64 edges for quasiplanar...
 //const std::string split = "3t1i";
 //const Edges edges =
 //{
@@ -38,15 +38,13 @@ const std::size_t n = 5; // note hard-coded limit of 64 edges for quasiplanar...
 //    {9,10}
 //};
 
-const std::size_t klim = 2;
+const std::size_t klim = 10;
 
 int main() {
     std::cout << "\n\n ===================================================== \n";
+    std::cout << "k = " << klim << ", n = " << n << std::endl;
     const Edges edges = generateCompleteGraph(n);
-    //std::cout << "klim = " << klim << ", n = " << n << ", split: " << split << std::endl;
-    //std::cout << "klim = " << klim << ", complete n = " << n << std::endl;
-    //std::cout << "K11 minus star 4, k = " << klim << ", n = " << n << std::endl;
-    std::size_t minimal_cr = 0x3f3f3f3f;
+    // std::size_t minimal_cr = 0x3f3f3f3f;
     std::vector< Drawing<klim> > solutions;
     std::vector<std::size_t> d_cnt(10000,1); // assume no more than 10000 unique drawings up to iso
 
@@ -66,7 +64,6 @@ int main() {
     // auto start_edge = edges.begin() + 1;
 
     int counter = 0;
-    //bool firstSol = true;
     for (auto e = start_edge;;) {
         std::size_t u = (*e)[0];
         std::size_t v = (*e)[1];
@@ -89,57 +86,23 @@ BACKUP:
             } while (!d.next_path(p, v));
         }
         d.add_edge(p, v);
-        if (++e == edges.end()) {
-            nlohmann::json export_data = d.serialize_to_json();
-            std::string filename = "test_drawing.json";
-            std::ofstream output_file(filename);
-            if (output_file.is_open()) {
-                output_file << export_data.dump(4); // 4-space indentation
-                output_file.close();
-                std::cout << "Success! Saved layout cleanly to: " << filename << std::endl;
-            } else {
-                std::cerr << "Error: Could not open " << filename << " for writing." << std::endl;
-                return 1;
-            }
 
-            std::ofstream of;
-            std::ostringstream filename2;
-            filename2 << "test.graphml";
-            of.open(filename2.str());
-            d.graphml_output(of);
-            of.close();
-            return 0;
-            //bool newSol = true;
-            //std::size_t d_ind = 0;
-            //for (auto it = solutions.begin(); it != solutions.end(); it++) {
-            //    if(are_isomorphic((*it),d)) {
-            //        newSol = false;
-            //        d_cnt[d_ind]++;
-            //        break;
-            //    }
-            //    d_ind++;
-            //}
-            //if (newSol) {
-            //    solutions.push_back(d);
-            //    // ++counter;
-            //    std::cout << ++counter << std::endl;
-            //    //if(!d.verify_quasiplanarity()) {
-            //    //    std::cerr << "CRITICAL ERROR: Drawing is not 3-quasiplanar!" << std::endl;
-            //    //    std::ofstream of;
-            //    //    std::ostringstream filename;
-            //    //    //filename << "drawings/fail_Drawing_maxQuasi" << n << "_k" << klim << "_" << counter << ".graphml";
-            //    //    //filename << "drawings/K11_minus_4/NOTQUASI_" << split << "_drawing_K" << n << "_" << klim << "_" <<  counter << ".graphml";
-            //    //    //filename << "drawings/K7_notQuasi/fail_K" << n << "_k" << klim << "_" << counter << ".graphml";
-            //    //    filename << "drawings/K8/failQuasi_K" << n << "_k" << klim << "_" << counter << ".graphml";
-            //    //    of.open(filename.str());
-            //    //    d.graphml_output(of);
-            //    //    of.close();
-            //    //    return 0;
-            //    //}
-            //    //if (firstSol) { std::cout << "found sol" << std::endl; firstSol = false; }
-            //    // minimal_cr = std::min(minimal_cr,d.crossings.size());
-            //}
-            //goto BACKUP;
+        if (++e == edges.end()) {
+            bool newSol = true;
+            std::size_t d_ind = 0;
+            for (auto it = solutions.begin(); it != solutions.end(); it++) {
+                if(are_isomorphic((*it),d)) {
+                    newSol = false;
+                    d_cnt[d_ind]++;
+                    break;
+                }
+                d_ind++;
+            }
+            if (newSol) {
+                solutions.push_back(d);
+                std::cout << ++counter << std::endl;
+            }
+            goto BACKUP;
         }
     }
 END:
@@ -150,21 +113,17 @@ END:
 
     std::size_t idx = 0;
     for (auto it = solutions.begin();it!=solutions.end();it++) {
-        std::ofstream of;
-        std::ostringstream filename;
-        //filename << "drawings/Drawing_maxQuasi" << n << "_k" << klim << "_" << idx << ".graphml";
-        //filename << "drawings/K4/K" << n << "_k" << klim << "_" << idx << ".graphml";
-        //filename << "drawings/K11_minus_4/4_drawing_K" << n << "_" << klim << "_" << idx << ".graphml";
-        //filename << "drawings/K11_minus_4/" << split << "_drawing_K" << n << "_" << klim << "_" << idx << ".graphml";
-        filename << "drawings/K8/K" << n << "_" << klim << "_" << idx << ".graphml";
-        of.open(filename.str());
-        (*it).graphml_output(of);
-        of.close();
+        std::string filename = "K10_" + std::to_string(idx) + ".json";
+        std::ofstream of_json(filename);
+        nlohmann::json output_json = (*it).serialize_to_json();
+        of_json << output_json.dump(4);
+        of_json.close();
         idx++;
     }
+
     std::cout << "Found " << counter << " drawings in total." << std::endl;
     std::cout << "Found " << solutions.size() << " unique drawings in total." << std::endl;
-    std::cout << "Minimal Crossing Number is "<<minimal_cr<<std::endl;
+    // std::cout << "Minimal Crossing Number is "<<minimal_cr<<std::endl;
 
     for (std::size_t i = 0; i < solutions.size(); i++) {
         std::cout << "Drawing-" << i << " has " << d_cnt[i] << " isomorphic drawings" << std::endl;
