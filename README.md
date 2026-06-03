@@ -33,7 +33,7 @@ The edges are ordered lexicographically.
 Then the drawing recipe is given. It describes how to draw the edges in order, meaning that one can just follow the list from top to bottom 
 to draw the graph by hand.
 
-For the first edge it contains the edge label and the two endpoints `u,v`.
+For the first edge it contains the edge label and the two endpoints `u,v`. The first edge is identified by having label `0` and being the first in the recipe.
 
 For subsequent edges it contains a unique label, the labels of edges it crosses, the endpoints `u` and `v`, and label of the edge it "starts after" in the counter-clockwise rotation around `u`.
 Note that therefore the start after edge is also incident on `u`.

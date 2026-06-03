@@ -20,22 +20,18 @@ Edges generateCompleteGraph(std::size_t n) {
 
 const std::size_t n = 10; // note hard-coded limit of 64 edges for quasiplanar...
 //const std::string split = "3t1i";
-//const Edges edges =
-//{
-//    {0,1},{0,2},{0,3},{0,4},{0,5},{0,6},{0,7},{0,8},{0,9},{0,10},
-//    //{1,2}, {1,3},
-//    {1,4},{1,5},{1,6},{1,7},{1,8},{1,9},{1,10},
-//    //{2,3},
-//    {2,4},{2,5},{2,6},{2,7},{2,8},{2,9},{2,10},
-//    {3,4},{3,5},{3,6},{3,7},{3,8},{3,9},{3,10},
-//    //{4,5},
-//    {4,6},{4,7},{4,8},{4,9},{4,10},
-//    {5,6},{5,7},{5,8},{5,9},{5,10},
-//    {6,7},{6,8},{6,9},{6,10},
-//    {7,8},{7,9},{7,10},
-//    {8,9},{8,10},
-//    {9,10}
-//};
+// const Edges edges =
+// {
+//     {0,1},{0,2},{0,3},{0,4},{0,5},{0,6},{0,7},{0,8},{0,9},{0,10},
+//     {1,2}, {1,3},{1,4},{1,5},{1,6},{1,7},{1,8},{1,9},
+//     {2,3},{2,4},{2,5},{2,6},{2,7},{2,8},{2,9},
+//     {3,4},{3,5},{3,6},{3,7},{3,8},{3,9},
+//     {4,5},{4,6},{4,7},{4,8},{4,9},
+//     {5,6},{5,7},{5,8},{5,9},
+//     {6,7},{6,8},{6,9},
+//     {7,8},{7,9},
+//     {8,9},
+// };
 
 const std::size_t klim = 10;
 
@@ -43,9 +39,9 @@ int main() {
     std::cout << "\n\n ===================================================== \n";
     std::cout << "k = " << klim << ", n = " << n << std::endl;
     const Edges edges = generateCompleteGraph(n);
-    // std::size_t minimal_cr = 0x3f3f3f3f;
+    std::size_t minimal_cr = 0x3f3f3f3f;
     std::vector< Drawing<klim> > solutions;
-    std::vector<std::size_t> d_cnt(10000,1); // assume no more than 10000 unique drawings up to iso
+    std::vector<std::size_t> d_cnt(10000,0); // assume no more than 10000 unique drawings up to iso
 
     Drawing<klim> d(n);
     d.add_first_edge(edges[0][0], edges[0][1]);
@@ -99,6 +95,9 @@ BACKUP:
             }
             if (newSol) {
                 solutions.push_back(d);
+                minimal_cr = std::min(minimal_cr,d.crossings.size());
+
+                if(!d.verify_vertex_non_crossing_edge()) std::cout << "vertex non crossing\n";
                 std::cout << ++counter << std::endl;
             }
             goto BACKUP;
@@ -112,17 +111,30 @@ END:
 
     std::size_t idx = 0;
     for (auto it = solutions.begin();it!=solutions.end();it++) {
-        std::string filename = "K10_" + std::to_string(idx) + ".json";
+        std::string filename = "jsons/K10_all_quasi/" + std::to_string(idx) + ".json";
         std::ofstream of_json(filename);
         nlohmann::ordered_json output_json = (*it).serialize_to_json();
         of_json << output_json.dump(4);
         of_json.close();
+        // if ((*it).crossings.size() == minimal_cr) {
+        //     std::string filename = "drawings/K7_prop_test/minCr_" + std::to_string(idx) + ".json";
+        //     std::ofstream of_json(filename);
+        //     nlohmann::ordered_json output_json = (*it).serialize_to_json();
+        //     of_json << output_json.dump(4);
+        //     of_json.close();
+
+        //     std::string filename2 = "drawings/K7_prop_test/minCr_" + std::to_string(idx) + ".graphml";
+        //     std::ofstream of_graphml(filename2);
+        //     (*it).graphml_output(of_graphml);
+        //     of_graphml.close();
+        // }
         idx++;
     }
 
     std::cout << "Found " << counter << " drawings in total." << std::endl;
     std::cout << "Found " << solutions.size() << " unique drawings in total." << std::endl;
-    // std::cout << "Minimal Crossing Number is "<<minimal_cr<<std::endl;
+    std::cout << "Found " << idx << " min crossing drawings in total." << std::endl;
+    std::cout << "Minimal Crossing Number is "<<minimal_cr<<std::endl;
 
     for (std::size_t i = 0; i < solutions.size(); i++) {
         std::cout << "Drawing-" << i << " has " << d_cnt[i] << " isomorphic drawings" << std::endl;
