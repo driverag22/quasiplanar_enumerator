@@ -201,9 +201,9 @@ struct Drawing {
         }
 
         int json_kplane = root["kplane"];
-        if (json_kplane != kplane) {
+        if (json_kplane > kplane) {
             throw std::runtime_error("Deserialization Constructor Error: Compile-time kplane (" + 
-                    std::to_string(kplane) + ") does not match JSON kplane (" + 
+                    std::to_string(kplane) + ") is strictly larger than JSON kplane (" + 
                     std::to_string(json_kplane) + ").");
         }
 
@@ -220,93 +220,94 @@ struct Drawing {
             std::size_t u = step["u"];
             std::size_t v = step["v"];
             std::size_t edge_label = step["edge_label"];
-            bool is_first = step["is_first_edge"];
 
-            if (is_first) {
+            // first edge
+            if (edge_label == 0) {
                 add_first_edge(u, v);
                 label_to_edge_map[edge_label] = &(edges.back());
-            } else {
-                std::size_t start_after = step["start_after_edge"];
+                continue;
+            }
 
-                // find the anchor edge
-                auto it = label_to_edge_map.find(start_after);
-                if (it == label_to_edge_map.end()) {
-                    throw std::runtime_error("Deserialization error: Anchor edge label " + std::to_string(start_after) + " not mapped.");
+            std::size_t start_after = step["start_after_edge"];
+
+            // find the anchor edge
+            auto it = label_to_edge_map.find(start_after);
+            if (it == label_to_edge_map.end()) {
+                throw std::runtime_error("Deserialization error: Anchor edge label " + std::to_string(start_after) + " not mapped.");
+            }
+            HdsEdge* anchor_edge = it->second;
+
+            // find the incoming halfedge segment belonging to anchor_edge incident to vertex u
+            HdsHalfedge* p0 = nullptr;
+            for (auto& he : halfedges) {
+                if (he.edge == anchor_edge && he.vertex->label == u) {
+                    p0 = &he;
+                    break;
                 }
-                HdsEdge* anchor_edge = it->second;
+            }
 
-                // find the incoming halfedge segment belonging to anchor_edge incident to vertex u
-                HdsHalfedge* p0 = nullptr;
-                for (auto& he : halfedges) {
-                    if (he.edge == anchor_edge && he.vertex->label == u) {
-                        p0 = &he;
+            if (!p0) {throw std::runtime_error("Deserialization error: could not find start_after_edge ID " + 
+                    std::to_string(start_after) + " at vertex " + std::to_string(u));}
+
+            HdsPath p;
+            p.push_back(p0);
+
+            // reconstruct intermediate crossings using correct face-walking logic
+            const auto& crossed = step["crossed_edges"];
+            HdsHalfedge* face_runner = p0; // start from p0
+
+            for (const auto& crossed_label_json : crossed) {
+                std::size_t crossed_label = crossed_label_json;
+
+                auto cross_it = label_to_edge_map.find(crossed_label);
+                if (cross_it == label_to_edge_map.end()) {
+                    throw std::runtime_error("Deserialization error: Crossed edge label " + std::to_string(crossed_label) + " not mapped.");
+                }
+                HdsEdge* target_cross_edge = cross_it->second;
+
+                HdsHalfedge* found_crossing = nullptr;
+                HdsHalfedge* start_face = face_runner;
+
+                // walk around face until we find edge to cross
+                do {
+                    face_runner = face_runner->next;
+                    if (face_runner->edge == target_cross_edge) {
+                        found_crossing = face_runner;
                         break;
                     }
-                }
+                } while (face_runner != start_face);
 
-                if (!p0) {throw std::runtime_error("Deserialization error: could not find start_after_edge ID " + 
-                            std::to_string(start_after) + " at vertex " + std::to_string(u));}
+                if (!found_crossing) {throw std::runtime_error("Deserialization error: could not find crossed edge ID " + 
+                        std::to_string(crossed_label) + " along the current face boundary.");}
 
-                HdsPath p;
-                p.push_back(p0);
-
-                // reconstruct intermediate crossings using correct face-walking logic
-                const auto& crossed = step["crossed_edges"];
-                HdsHalfedge* face_runner = p0; // start from p0
-
-                for (const auto& crossed_label_json : crossed) {
-                    std::size_t crossed_label = crossed_label_json;
-
-                    auto cross_it = label_to_edge_map.find(crossed_label);
-                    if (cross_it == label_to_edge_map.end()) {
-                        throw std::runtime_error("Deserialization error: Crossed edge label " + std::to_string(crossed_label) + " not mapped.");
-                    }
-                    HdsEdge* target_cross_edge = cross_it->second;
-
-                    HdsHalfedge* found_crossing = nullptr;
-                    HdsHalfedge* start_face = face_runner;
-
-                    // walk around face until we find edge to cross
-                    do {
-                        face_runner = face_runner->next;
-                        if (face_runner->edge == target_cross_edge) {
-                            found_crossing = face_runner;
-                            break;
-                        }
-                    } while (face_runner != start_face);
-
-                    if (!found_crossing) {throw std::runtime_error("Deserialization error: could not find crossed edge ID " + 
-                                std::to_string(crossed_label) + " along the current face boundary.");}
-
-                    p.push_back(found_crossing);
-                    // after crossing, enter the adjacent face via the twin halfedge
-                    face_runner = found_crossing->twin;
-                }
-
-                // reconstruct target pointer p[l-1]
-                if (vertices[v].halfedge == nullptr) {
-                    p.push_back(nullptr); // target vertex is isolated
-                } else {
-                    HdsHalfedge* found_target = nullptr;
-                    HdsHalfedge* start_face = face_runner;
-
-                    // walk around face until we find target vertex
-                    do {
-                        face_runner = face_runner->next;
-                        if (face_runner->vertex->label == v) {
-                            found_target = face_runner;
-                            break;
-                        }
-                    } while (face_runner != start_face);
-
-                    if (!found_target) {throw std::runtime_error("Deserialization error: could not find target vertex " + 
-                                std::to_string(v) + " in the current face, from: " + std::to_string(u));}
-                    p.push_back(found_target);
-                }
-
-                add_edge(p, v, 0);
-                label_to_edge_map[edge_label] = &(edges.back());
+                p.push_back(found_crossing);
+                // after crossing, enter the adjacent face via the twin halfedge
+                face_runner = found_crossing->twin;
             }
+
+            // reconstruct target pointer p[l-1]
+            if (vertices[v].halfedge == nullptr) {
+                p.push_back(nullptr); // target vertex is isolated
+            } else {
+                HdsHalfedge* found_target = nullptr;
+                HdsHalfedge* start_face = face_runner;
+
+                // walk around face until we find target vertex
+                do {
+                    face_runner = face_runner->next;
+                    if (face_runner->vertex->label == v) {
+                        found_target = face_runner;
+                        break;
+                    }
+                } while (face_runner != start_face);
+
+                if (!found_target) {throw std::runtime_error("Deserialization error: could not find target vertex " + 
+                        std::to_string(v) + " in the current face, from: " + std::to_string(u));}
+                p.push_back(found_target);
+            }
+
+            add_edge(p, v, 0);
+            label_to_edge_map[edge_label] = &(edges.back());
         }
     }
 
@@ -813,7 +814,6 @@ public:
 		
 		// all crossings failed for current start edge, try a new start edge
 		if (p.size() > 2) {
-            p.resize(2); // remove stale crossing elements
 			for (;;) {
 				p[1] = p[0] = p[0]->twin->prev;
 				if (p[0] == end) break;
@@ -1101,7 +1101,7 @@ public:
     return true;
   }
 
-  // Returns true if at least n-1 vertices are incident on an uncrossed edge
+  // Returns true if all vertices are incident on an uncrossed edge
   bool verify_vertex_non_crossing_edge() const {
     std::size_t n = vertices.size();
     std::vector<bool> has_uncrossed(n, false);
@@ -1114,7 +1114,7 @@ public:
     }
     std::size_t covered_vertices = std::count(has_uncrossed.begin(), has_uncrossed.end(), true);
 
-    return covered_vertices >= n - 1;
+    return covered_vertices == n;
   }
 
   // Returns true if the current drawing contains a matching of non-crossing edges.
@@ -1157,11 +1157,7 @@ public:
       step["u"] = edge.u;
       step["v"] = edge.v;
 
-      if (edge.label == 0) {
-        step["is_first_edge"] = true;
-      } else {
-        step["is_first_edge"] = false;
-
+      if (edge.label != 0) {
         // edge.built[0] points to the halfedge we insert after clockwise
         if (edge.built.empty() || edge.built[0] == nullptr || edge.built[0]->edge == nullptr) {
           throw std::runtime_error("Malformed creation path at edge " + std::to_string(edge.label));

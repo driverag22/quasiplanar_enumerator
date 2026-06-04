@@ -1,8 +1,10 @@
 .bin/
 drawings/
+jsons/
 *.slurm
 *.err
 *.log
 .out/
 .out_err/
+build/
 include/
