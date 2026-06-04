@@ -2,7 +2,6 @@
 #define HDS_HPP
 #include <vector>
 #include <map>
-#include <set>
 #include <list>
 #include <stdexcept>
 #include <algorithm>

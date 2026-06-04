@@ -1,6 +1,7 @@
 #ifndef HDS_HPP
 #define HDS_HPP
 #include <vector>
+#include <map>
 #include <list>
 #include <stdexcept>
 #include <algorithm>
@@ -8,6 +9,7 @@
 #include <string>
 #include <cassert> 
 #include <stdint.h>
+#include <nlohmann/json.hpp>
 
 // classic Halfedge Data Structure
 
@@ -173,6 +175,123 @@ struct Drawing {
 				if (*x != 0) 
 					*x = ind[(*x)->label];
 	}
+
+    // Construct drawing from json recipe
+    Drawing(const nlohmann::json& root, const std::size_t target_n = 0) {
+        if (!root.contains("kplane") || !root.contains("drawing_recipe") || !root.contains("num_vertices")) {
+            throw std::runtime_error("Deserialization Constructor Error: Missing essential JSON keys.");
+        }
+
+        int json_kplane = root["kplane"];
+        if (json_kplane > kplane) {
+            throw std::runtime_error("Deserialization Constructor Error: Compile-time kplane (" + 
+                    std::to_string(kplane) + ") is strictly larger than JSON kplane (" + 
+                    std::to_string(json_kplane) + ").");
+        }
+
+        std::size_t num_v = root["num_vertices"];
+        if (target_n > num_v) num_v = target_n;
+        for (std::size_t i = 0; i < num_v; ++i) {
+            vertices.push_back(HdsVertex(nullptr, i));
+        }
+
+        std::map<std::size_t, HdsEdge*> label_to_edge_map; // map JSON labels to edges
+
+        const auto& recipe = root["drawing_recipe"];
+        for (const auto& step : recipe) {
+            std::size_t u = step["u"];
+            std::size_t v = step["v"];
+            std::size_t edge_label = step["edge_label"];
+
+            // first edge
+            if (edge_label == 0) {
+                add_first_edge(u, v);
+                label_to_edge_map[edge_label] = &(edges.back());
+                continue;
+            }
+
+            std::size_t start_after = step["start_after_edge"];
+
+            // find the anchor edge
+            auto it = label_to_edge_map.find(start_after);
+            if (it == label_to_edge_map.end()) {
+                throw std::runtime_error("Deserialization error: Anchor edge label " + std::to_string(start_after) + " not mapped.");
+            }
+            HdsEdge* anchor_edge = it->second;
+
+            // find the incoming halfedge segment belonging to anchor_edge incident to vertex u
+            HdsHalfedge* p0 = nullptr;
+            for (auto& he : halfedges) {
+                if (he.edge == anchor_edge && he.vertex->label == u) {
+                    p0 = &he;
+                    break;
+                }
+            }
+
+            if (!p0) {throw std::runtime_error("Deserialization error: could not find start_after_edge ID " + 
+                    std::to_string(start_after) + " at vertex " + std::to_string(u));}
+
+            HdsPath p;
+            p.push_back(p0);
+
+            // reconstruct intermediate crossings using correct face-walking logic
+            const auto& crossed = step["crossed_edges"];
+            HdsHalfedge* face_runner = p0; // start from p0
+
+            for (const auto& crossed_label_json : crossed) {
+                std::size_t crossed_label = crossed_label_json;
+
+                auto cross_it = label_to_edge_map.find(crossed_label);
+                if (cross_it == label_to_edge_map.end()) {
+                    throw std::runtime_error("Deserialization error: Crossed edge label " + std::to_string(crossed_label) + " not mapped.");
+                }
+                HdsEdge* target_cross_edge = cross_it->second;
+
+                HdsHalfedge* found_crossing = nullptr;
+                HdsHalfedge* start_face = face_runner;
+
+                // walk around face until we find edge to cross
+                do {
+                    face_runner = face_runner->next;
+                    if (face_runner->edge == target_cross_edge) {
+                        found_crossing = face_runner;
+                        break;
+                    }
+                } while (face_runner != start_face);
+
+                if (!found_crossing) {throw std::runtime_error("Deserialization error: could not find crossed edge ID " + 
+                        std::to_string(crossed_label) + " along the current face boundary.");}
+
+                p.push_back(found_crossing);
+                // after crossing, enter the adjacent face via the twin halfedge
+                face_runner = found_crossing->twin;
+            }
+
+            // reconstruct target pointer p[l-1]
+            if (vertices[v].halfedge == nullptr) {
+                p.push_back(nullptr); // target vertex is isolated
+            } else {
+                HdsHalfedge* found_target = nullptr;
+                HdsHalfedge* start_face = face_runner;
+
+                // walk around face until we find target vertex
+                do {
+                    face_runner = face_runner->next;
+                    if (face_runner->vertex->label == v) {
+                        found_target = face_runner;
+                        break;
+                    }
+                } while (face_runner != start_face);
+
+                if (!found_target) {throw std::runtime_error("Deserialization error: could not find target vertex " + 
+                        std::to_string(v) + " in the current face, from: " + std::to_string(u));}
+                p.push_back(found_target);
+            }
+
+            add_edge(p, v, 0);
+            label_to_edge_map[edge_label] = &(edges.back());
+        }
+    }
 	
 	// no copy-assignment allowed
 	Drawing& operator=(const Drawing&) = delete;
@@ -851,6 +970,59 @@ public:
 		}
 		return true;
 	}
+
+    // Extract abstract graph as a list of canonical, sorted edges
+    nlohmann::json extract_abstract_graph() const {
+        nlohmann::json j_graph = nlohmann::json::array();
+        for (const auto& edge : edges) {
+            std::size_t low = std::min(edge.u, edge.v);
+            std::size_t high = std::max(edge.u, edge.v);
+            j_graph.push_back(nlohmann::json::array_t{low, high});
+        }
+        return j_graph;
+    }
+
+    // Extract the order and topological context of edge insertions
+    nlohmann::json extract_drawing_recipe() const {
+        nlohmann::json j_recipe = nlohmann::json::array();
+
+        for (const auto& edge : edges) {
+            nlohmann::json step;
+            step["edge_label"] = edge.label;
+            step["u"] = edge.u;
+            step["v"] = edge.v;
+
+            if (edge.label != 0) {
+                // edge.built[0] points to the halfedge we insert after clockwise
+                if (edge.built.empty() || edge.built[0] == nullptr || edge.built[0]->edge == nullptr) {
+                    throw std::runtime_error("Malformed creation path at edge " + std::to_string(edge.label));
+                }
+                step["start_after_edge"] = edge.built[0]->edge->label;
+
+                // get crossed halfedges (from 1 to edge.built.size()-1)
+                auto crossed_arr = nlohmann::json::array();
+                for (std::size_t j = 1; j < edge.built.size() - 1; ++j) {
+                    if (edge.built[j] != nullptr && edge.built[j]->edge != nullptr) {
+                        crossed_arr.push_back(edge.built[j]->edge->label);
+                    }
+                }
+                step["crossed_edges"] = crossed_arr;
+            }
+            j_recipe.push_back(step);
+        }
+        return j_recipe;
+    }
+
+    nlohmann::ordered_json serialize_to_json() const {
+        nlohmann::ordered_json root;
+
+        root["kplane"] = kplane;
+        root["num_vertices"] = vertices.size();
+        root["abstract_graph"] = extract_abstract_graph();
+        root["drawing_recipe"] = extract_drawing_recipe();
+        return root;
+    }
+
 	std::vector<HdsVertex> vertices;
 	std::list<HdsVertex> crossings;
 	std::list<HdsHalfedge> halfedges;
