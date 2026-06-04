@@ -18,7 +18,7 @@ Edges generateCompleteGraph(std::size_t n) {
     return edges;
 }
 
-const std::size_t n = 10; // note hard-coded limit of 64 edges for quasiplanar...
+const std::size_t n = 7; // note hard-coded limit of 64 edges for quasiplanar...
 //const std::string split = "3t1i";
 // const Edges edges =
 // {
@@ -33,7 +33,7 @@ const std::size_t n = 10; // note hard-coded limit of 64 edges for quasiplanar..
 //     {8,9},
 // };
 
-const std::size_t klim = 10;
+const std::size_t klim = 9;
 
 int main() {
     std::cout << "\n\n ===================================================== \n";
@@ -97,7 +97,6 @@ BACKUP:
                 solutions.push_back(d);
                 minimal_cr = std::min(minimal_cr,d.crossings.size());
 
-                if(!d.verify_vertex_non_crossing_edge()) std::cout << "vertex non crossing\n";
                 std::cout << ++counter << std::endl;
             }
             goto BACKUP;
@@ -111,23 +110,16 @@ END:
 
     std::size_t idx = 0;
     for (auto it = solutions.begin();it!=solutions.end();it++) {
-        std::string filename = "jsons/K10_all_quasi/" + std::to_string(idx) + ".json";
+        std::string filename = "drawings/K7_k9/jsons/" + std::to_string(idx) + ".json";
         std::ofstream of_json(filename);
         nlohmann::ordered_json output_json = (*it).serialize_to_json();
         of_json << output_json.dump(4);
         of_json.close();
-        // if ((*it).crossings.size() == minimal_cr) {
-        //     std::string filename = "drawings/K7_prop_test/minCr_" + std::to_string(idx) + ".json";
-        //     std::ofstream of_json(filename);
-        //     nlohmann::ordered_json output_json = (*it).serialize_to_json();
-        //     of_json << output_json.dump(4);
-        //     of_json.close();
 
-        //     std::string filename2 = "drawings/K7_prop_test/minCr_" + std::to_string(idx) + ".graphml";
-        //     std::ofstream of_graphml(filename2);
-        //     (*it).graphml_output(of_graphml);
-        //     of_graphml.close();
-        // }
+        // std::string filename2 = "drawings/K7_prop_test/minCr_" + std::to_string(idx) + ".graphml";
+        // std::ofstream of_graphml(filename2);
+        // (*it).graphml_output(of_graphml);
+        // of_graphml.close();
         idx++;
     }
 
