@@ -195,7 +195,7 @@ struct Drawing {
 	}
 
     // Construct drawing from json recipe
-    Drawing(const nlohmann::json& root) {
+    Drawing(const nlohmann::json& root, const std::size_t target_n = 0) {
         if (!root.contains("kplane") || !root.contains("drawing_recipe") || !root.contains("num_vertices")) {
             throw std::runtime_error("Deserialization Constructor Error: Missing essential JSON keys.");
         }
@@ -208,6 +208,7 @@ struct Drawing {
         }
 
         std::size_t num_v = root["num_vertices"];
+        if (target_n > num_v) num_v = target_n;
         for (std::size_t i = 0; i < num_v; ++i) {
             vertices.push_back(HdsVertex(nullptr, i));
         }

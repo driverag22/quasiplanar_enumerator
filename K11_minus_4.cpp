@@ -29,7 +29,7 @@ int main() {
         input_file.close();
 
         // loading drawing
-        Drawing<klim> d(import_data);
+        Drawing<klim> d(import_data, n);
         auto start_edge = edges.begin();
 
         for (auto e = start_edge;;) {
