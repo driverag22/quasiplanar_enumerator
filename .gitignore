@@ -5,3 +5,4 @@ drawings/
 *.log
 .out/
 .out_err/
+include/
