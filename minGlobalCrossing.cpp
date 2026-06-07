@@ -17,8 +17,8 @@ Edges generateCompleteGraph(std::size_t n) {
     return edges;
 }
 
-const std::size_t n = 8; // note hard-coded limit of 64 edges for quasiplanar...
-const std::size_t klim = 12;
+const std::size_t n = 9; // note hard-coded limit of 64 edges for quasiplanar...
+const std::size_t klim = 15;
 
 int main() {
     std::cout << "\n\n ===================================================== \n";
@@ -37,10 +37,9 @@ int main() {
         d.add_edge(p, i);
     }
     std::cout << "Star built" << std::endl;
-    std::size_t cnt = 0;
 
     auto start_edge = edges.begin() + (num_fixed_edges-1);
-    int counter = 0;
+    int cnt = 0;
     for (auto e = start_edge;;) {
         std::size_t u = (*e)[0];
         std::size_t v = (*e)[1];
@@ -69,7 +68,7 @@ BACKUP:
             else {
                 std::cout << "not quasiplanar" << std::endl;
 
-                std::string jsonOut = "./drawings/K8/notQuasi" + std::to_string(cnt) + ".json";
+                std::string jsonOut = "./drawings/K9/notQuasi" + std::to_string(cnt) + ".json";
                 std::ofstream of_json(jsonOut);
                 nlohmann::ordered_json output_json = d.serialize_to_json();
                 of_json << output_json.dump(4);
@@ -82,33 +81,5 @@ BACKUP:
     }
 END:
     std::cout << "Min crossing drawing for K" << n << " has " << minimal_cr << " crossings." << std::endl;
-    // std::cout << "Found " << solutions.size() << " drawings in total." << std::endl;
-    // if(solutions.size() == 0) {
-    //     return 0;
-    // }
-
-    // std::size_t idx = 0;
-    // for (auto it = solutions.begin();it!=solutions.end();it++) {
-    //     std::string filename = "drawings/K7_k9/jsons/" + std::to_string(idx) + ".json";
-    //     std::ofstream of_json(filename);
-    //     nlohmann::ordered_json output_json = (*it).serialize_to_json();
-    //     of_json << output_json.dump(4);
-    //     of_json.close();
-
-    //     // std::string filename2 = "drawings/K7_prop_test/minCr_" + std::to_string(idx) + ".graphml";
-    //     // std::ofstream of_graphml(filename2);
-    //     // (*it).graphml_output(of_graphml);
-    //     // of_graphml.close();
-    //     idx++;
-    // }
-
-    // std::cout << "Found " << counter << " drawings in total." << std::endl;
-    // std::cout << "Found " << solutions.size() << " unique drawings in total." << std::endl;
-    // std::cout << "Found " << idx << " min crossing drawings in total." << std::endl;
-    // std::cout << "Minimal Crossing Number is "<<minimal_cr<<std::endl;
-
-    // for (std::size_t i = 0; i < solutions.size(); i++) {
-    //     std::cout << "Drawing-" << i << " has " << d_cnt[i] << " isomorphic drawings" << std::endl;
-    // }
     return 0;
 }
