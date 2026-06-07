@@ -24,7 +24,7 @@ int main() {
     std::cout << "\n\n ===================================================== \n";
     std::cout << "k = " << klim << ", n = " << n << std::endl;
     const Edges edges = generateCompleteGraph(n);
-    std::size_t minimal_cr = 0x3f3f3f3f;
+    const std::size_t minimal_cr = 36;
 
     Drawing<klim> d(n);
     d.add_first_edge(edges[0][0], edges[0][1]);
@@ -64,22 +64,55 @@ BACKUP:
         d.add_edge(p, v);
 
         if (++e == edges.end()) {
-            if (d.verify_quasiplanarity()) minimal_cr = std::min(minimal_cr, d.crossings.size());
-            else {
+            if (!d.verify_quasiplanarity()) {
+                std::cout << cnt << std::endl;
                 std::cout << "not quasiplanar" << std::endl;
-
-                std::string jsonOut = "./drawings/K9/notQuasi" + std::to_string(cnt) + ".json";
+                std::string jsonOut = "./drawings/K9/notQuasi_" + std::to_string(cnt) + ".json";
                 std::ofstream of_json(jsonOut);
                 nlohmann::ordered_json output_json = d.serialize_to_json();
                 of_json << output_json.dump(4);
                 of_json.close();
 
                 cnt++;
+            } else if (d.crossings.size() == minimal_cr) {
+                std::cout << cnt << std::endl;
+                std::string jsonOut = "./drawings/K9/" + std::to_string(cnt) + ".json";
+                std::ofstream of_json(jsonOut);
+                nlohmann::ordered_json output_json = d.serialize_to_json();
+                of_json << output_json.dump(4);
+                of_json.close();
+
+                if(!d.verify_non_crossing_matching()) {
+                    std::cout << "no non cross matching" << std::endl;
+
+                    std::string jsonOut = "./drawings/K9/M_" + std::to_string(cnt) + ".json";
+                    std::ofstream of_json(jsonOut);
+                    nlohmann::ordered_json output_json = d.serialize_to_json();
+                    of_json << output_json.dump(4);
+                    of_json.close();
+                }
+                if(!d.verify_vertex_non_crossing_edge()) {
+                    std::cout << "no non cross vertex" << std::endl;
+                    std::string jsonOut = "./drawings/K9/E_" + std::to_string(cnt) + ".json";
+                    std::ofstream of_json(jsonOut);
+                    nlohmann::ordered_json output_json = d.serialize_to_json();
+                    of_json << output_json.dump(4);
+                    of_json.close();
+                }
+                cnt++;
+            } else if (d.crossings.size() < minimal_cr) {
+                std::cout << cnt << std::endl;
+                std::cout << "less crossings" << std::endl;
+                std::string jsonOut = "./drawings/K9/lessCrossings_" + std::to_string(cnt) + ".json";
+                std::ofstream of_json(jsonOut);
+                nlohmann::ordered_json output_json = d.serialize_to_json();
+                of_json << output_json.dump(4);
+                of_json.close();
+                cnt++;
             }
             goto BACKUP;
         }
     }
 END:
-    std::cout << "Min crossing drawing for K" << n << " has " << minimal_cr << " crossings." << std::endl;
     return 0;
 }
