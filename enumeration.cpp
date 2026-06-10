@@ -18,7 +18,7 @@ Edges generateCompleteGraph(std::size_t n) {
     return edges;
 }
 
-const std::size_t n = 7; // note hard-coded limit of 64 edges for quasiplanar...
+const std::size_t n = 9; // note hard-coded limit of 64 edges for quasiplanar...
 //const std::string split = "3t1i";
 // const Edges edges =
 // {
@@ -33,13 +33,13 @@ const std::size_t n = 7; // note hard-coded limit of 64 edges for quasiplanar...
 //     {8,9},
 // };
 
-const std::size_t klim = 9;
+const std::size_t klim = 15;
 
 int main() {
     std::cout << "\n\n ===================================================== \n";
     std::cout << "k = " << klim << ", n = " << n << std::endl;
     const Edges edges = generateCompleteGraph(n);
-    std::size_t minimal_cr = 0x3f3f3f3f;
+    const std::size_t minimal_cr = 36;
     std::vector< Drawing<klim> > solutions;
     std::vector<std::size_t> d_cnt(10000,0); // assume no more than 10000 unique drawings up to iso
 
@@ -83,6 +83,7 @@ BACKUP:
         d.add_edge(p, v);
 
         if (++e == edges.end()) {
+            if (d.crossings.size() > minimal_cr) goto BACKUP;
             bool newSol = true;
             std::size_t d_ind = 0;
             for (auto it = solutions.begin(); it != solutions.end(); it++) {
@@ -95,22 +96,26 @@ BACKUP:
             }
             if (newSol) {
                 solutions.push_back(d);
-                minimal_cr = std::min(minimal_cr,d.crossings.size());
-
                 std::cout << ++counter << std::endl;
             }
             goto BACKUP;
         }
     }
 END:
-    std::cout << "Found " << solutions.size() << " drawings in total." << std::endl;
+    std::cout << "Found " << solutions.size() << " min crossing drawings in total." << std::endl;
     if(solutions.size() == 0) {
         return 0;
     }
 
     std::size_t idx = 0;
     for (auto it = solutions.begin();it!=solutions.end();it++) {
-        std::string filename = "drawings/K7_k9/jsons/" + std::to_string(idx) + ".json";
+        if (!(*it).verify_non_crossing_matching()) {
+            std::cout << "no non crossing matching!" << std::endl;
+        }
+        if (!(*it).verify_vertex_non_crossing_edge()) {
+            std::cout << "vertex without non-crossing edge!" << std::endl;
+        }
+        std::string filename = "../drawingsQuasi/K9/minGlobalCr/jsons/" + std::to_string(idx) + ".json";
         std::ofstream of_json(filename);
         nlohmann::ordered_json output_json = (*it).serialize_to_json();
         of_json << output_json.dump(4);
