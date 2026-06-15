@@ -8,3 +8,4 @@ jsons/
 .out_err/
 build/
 include/
+compile.sh
