@@ -130,7 +130,7 @@ struct Drawing {
         vertices.reserve(n);
         for (std::size_t i = 0; i < n; ++i)
             vertices.emplace_back((HdsHalfedge*)(0), i);
-        cross_mat.assign(64, 0); // init to 64 edges
+        cross_mat.clear();
     }
 
     // copy constructor; many pointers, we have to recompute all of them
@@ -205,7 +205,7 @@ struct Drawing {
             vertices.push_back(HdsVertex(nullptr, i));
         }
 
-        cross_mat.assign(64, 0);
+        cross_mat.clear();
         std::map<std::size_t, HdsEdge*> label_to_edge_map; // map JSON labels to edges
 
         const auto& recipe = root["drawing_recipe"];
@@ -486,8 +486,8 @@ struct Drawing {
         for (std::size_t i = 1; i < p.size(); ++i) {
             if (i < p.size() - 1 && p[i] != 0) {
                 std::size_t crossed_label = p[i]->edge->label;
-                cross_mat[new_label] |= (1ULL << crossed_label);
-                cross_mat[crossed_label] |= (1ULL << new_label);
+                cross_mat[new_label].set(crossed_label);
+                cross_mat[crossed_label].set(new_label);
             }
         }
 
@@ -523,13 +523,13 @@ struct Drawing {
     void remove_edge() {
         // cross_mat cleanup
         std::size_t removed_label = edges.back().label;
-        uint64_t crossed = cross_mat[removed_label];
-        for (int b = 0; b < 64; ++b) { // hard-coded 64 edge limit
-            if ((crossed >> b) & 1) {
-                cross_mat[b] &= ~(1ULL << removed_label);
+        std::bitset<MAX_EDGES> crossed = cross_mat[removed_label];
+        for (int b = 0; b < MAX_EDGES; ++b) { // hard-coded 96 edge limit
+            if (crossed.test(b)) {
+                cross_mat[b].reset(removed_label);
             }
         }
-        cross_mat[removed_label] = 0; // wipe the removed edge's row
+        cross_mat[removed_label].reset(); // wipe the removed edge's row
 
         HdsPath p = edges.back().built;
         if (p.size() < 2) 
@@ -674,7 +674,7 @@ struct Drawing {
             std::size_t e_new = p[ci]->edge->label; // edge we cross
             for (std::size_t x = 1; x < ci; ++x) { // prev edgges
                 std::size_t e_old = p[x]->edge->label;
-                if ((cross_mat[e_new] & (1ULL << e_old)) != 0) {
+                if (cross_mat[e_new].test(e_old)) {
                     qp_violation = true; 
                     break;
                 }
@@ -1153,7 +1153,8 @@ struct Drawing {
     std::list<HdsHalfedge> halfedges;
     std::list<HdsEdge> edges;
 
-    std::vector<uint64_t> cross_mat; // edge crossing matrix, assumes at most 64 edges
+    inline static constexpr std::size_t MAX_EDGES = 96;
+    std::vector<std::bitset<MAX_EDGES>> cross_mat; // edge crossing matrix, assumes at most 64 edges
 }
 ;
 

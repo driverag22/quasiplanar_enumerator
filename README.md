@@ -1,6 +1,6 @@
 # Description
 A graph $G$ is quasiplanar if it admits a drawing in the plane where no 3 edges are pairwise intersecting.
-This code enumerates all simple quasiplane drawings of a graph.
+This code enumerates all simple quasiplane drawings of a graph up to strong isomorphism.
 
 Based on the code from "On maximal 3-planar graphs" by Michael Hoffmann, Meghana M. Reddy, and Shengzhe Wang (EuroCG 2024), which has been adapted to enumerate quasiplanar graphs 
 and $k$-planar graphs (for arbitrary $k$).
@@ -10,15 +10,17 @@ and $k$-planar graphs (for arbitrary $k$).
 
 The local crossing number (`klim`) controls the depth of the recurrence: the higher `klim` the more branching the algorithm do.
 
+The current implementation has a hard-coded limit of 96 edges (via `inline static constexpr std::size_t MAX_EDGES = 96`).
+
 # JSON drawing representation
 
 Created drawings can be saved into a JSON format that describes the drawing. 
-From it the drawing can be recreated by hand, or reloaded in the code as a `Drawing` struct.
+From it, the drawing can be recreated by hand, or reloaded in the code as a `Drawing` struct.
 
 The function `hds_quasiplanar/serialize_to_json()` generates the JSON object using the `nlohmann` library, which can then be saved as a 
 JSON file using `nlohmann::json/dump()`.
 
-When constructing a new `Drawing` struct, one can pass a `nlohmann::json` object, and the drawing will then follow the recipe specified by the json file to make the drawing.
+When constructing a new `Drawing` struct, one can pass a `nlohmann::json` object, and the code will then follow the recipe specified by the json file to make the drawing.
 
 ## JSON format
 
