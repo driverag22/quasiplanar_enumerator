@@ -131,6 +131,7 @@ struct Drawing {
         for (std::size_t i = 0; i < n; ++i)
             vertices.emplace_back((HdsHalfedge*)(0), i);
         cross_mat.clear();
+        cross_mat.resize(MAX_EDGES);
     }
 
     // copy constructor; many pointers, we have to recompute all of them
@@ -206,13 +207,14 @@ struct Drawing {
         }
 
         cross_mat.clear();
+        cross_mat.resize(MAX_EDGES);
         std::map<std::size_t, HdsEdge*> label_to_edge_map; // map JSON labels to edges
 
         const auto& recipe = root["drawing_recipe"];
         for (const auto& step : recipe) {
-            std::size_t u = step["u"];
-            std::size_t v = step["v"];
-            std::size_t edge_label = step["edge_label"];
+            std::size_t u = step["u"].get<std::size_t>();
+            std::size_t v = step["v"].get<std::size_t>();
+            std::size_t edge_label = step["edge_label"].get<std::size_t>();
 
             // first edge
             if (edge_label == 0) {
@@ -221,7 +223,7 @@ struct Drawing {
                 continue;
             }
 
-            std::size_t start_after = step["start_after_edge"];
+            std::size_t start_after = step["start_after_edge"].get<std::size_t>();
 
             // find the anchor edge
             auto it = label_to_edge_map.find(start_after);
@@ -245,7 +247,7 @@ struct Drawing {
             HdsPath p;
             p.push_back(p0);
 
-            // reconstruct intermediate crossings using correct face-walking logic
+            // reconstruct intermediate crossings
             const auto& crossed = step["crossed_edges"];
             HdsHalfedge* face_runner = p0; // start from p0
 
@@ -524,7 +526,7 @@ struct Drawing {
         // cross_mat cleanup
         std::size_t removed_label = edges.back().label;
         std::bitset<MAX_EDGES> crossed = cross_mat[removed_label];
-        for (int b = 0; b < MAX_EDGES; ++b) { // hard-coded 96 edge limit
+        for (std::size_t b = 0; b < MAX_EDGES; ++b) { // hard-coded 96 edge limit
             if (crossed.test(b)) {
                 cross_mat[b].reset(removed_label);
             }
@@ -802,6 +804,107 @@ struct Drawing {
         }
 
         return false;
+    }
+
+    // Injects a json recipe into existing drawing, shifing vertex and edge indices by vertex_shift and edge_shift respectively.
+    //  pre: the first vertex of the injected recipe is already existing in the drawing, and the injected drawing is anchored 
+    //       around the given first_edge_anchor (the first edge is added based on first_edge_anchor)
+    bool inject_shifted_recipe(const nlohmann::json& root, std::size_t vertex_shift, std::size_t edge_shift, 
+            HdsHalfedge* first_edge_anchor) {
+        if (!root.contains("drawing_recipe")) return false;
+        const auto& recipe = root["drawing_recipe"];
+
+        // local map to track edge dependencies within this specific recipe injection
+        std::map<std::size_t, HdsEdge*> local_label_to_edge_map;
+
+        for (const auto& step : recipe) {
+            std::size_t u = step["u"].get<std::size_t>() + vertex_shift;
+            std::size_t v = step["v"].get<std::size_t>() + vertex_shift;
+            std::size_t edge_label = step["edge_label"].get<std::size_t>() + edge_shift;
+
+            // first edge of the recipe, anchor using first_edge_anchor
+            if (edge_label == edge_shift) {
+                HdsPath p;
+                if (first_edge_anchor->vertex->label != u) return false;
+
+                p.push_back(first_edge_anchor);
+                p.push_back(nullptr); // target vertex is currently isolated
+
+                add_edge(p, v, 0);
+                local_label_to_edge_map[edge_label] = &(edges.back());
+                continue;
+            }
+
+            std::size_t start_after = step["start_after_edge"].get<std::size_t>() + edge_shift;
+            // find anchor
+            auto it = local_label_to_edge_map.find(start_after);
+            if (it == local_label_to_edge_map.end()) return false;
+            HdsEdge* anchor_edge = it->second;
+
+            // find the incoming halfedge segment belonging to the anchor
+            HdsHalfedge* p0 = nullptr;
+            for (auto& he : halfedges) {
+                if (he.edge == anchor_edge && he.vertex->label == u) {
+                    p0 = &he;
+                    break;
+                }
+            }
+            if (!p0) return false;
+
+            HdsPath p;
+            p.push_back(p0);
+
+            const auto& crossed = step["crossed_edges"];
+            HdsHalfedge* face_runner = p0;
+
+            // reconstruct intermediate crossings
+            for (const auto& crossed_label_json : crossed) {
+                std::size_t crossed_label = crossed_label_json.get<std::size_t>() + edge_shift;
+
+                auto cross_it = local_label_to_edge_map.find(crossed_label);
+                if (cross_it == local_label_to_edge_map.end()) return false;
+
+                HdsEdge* target_cross_edge = cross_it->second;
+
+                HdsHalfedge* found_crossing = nullptr;
+                HdsHalfedge* start_face = face_runner;
+
+                // walk around face until we find edge to cross
+                do {
+                    face_runner = face_runner->next;
+                    if (face_runner->edge == target_cross_edge) {
+                        found_crossing = face_runner;
+                        break;
+                    }
+                } while (face_runner != start_face);
+
+                if (!found_crossing) return false;
+
+                p.push_back(found_crossing);
+                face_runner = found_crossing->twin; // enter adjacent face/cross edge
+            }
+
+            if (vertices[v].halfedge == nullptr) {
+                p.push_back(nullptr);
+            } else {
+                HdsHalfedge* found_target = nullptr;
+                HdsHalfedge* start_face = face_runner;
+                do {
+                    face_runner = face_runner->next;
+                    if (face_runner->vertex->label == v) {
+                        found_target = face_runner;
+                        break;
+                    }
+                } while (face_runner != start_face);
+
+                if (!found_target) return false;
+                p.push_back(found_target);
+            }
+
+            add_edge(p, v, 0);
+            local_label_to_edge_map[edge_label] = &(edges.back());
+        }
+        return true;
     }
 
 
