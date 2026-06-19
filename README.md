@@ -44,3 +44,9 @@ This drawing_recipe follows the same order as the code itself when constructing 
 
 The `kplane` and `num_vertices` of the drawing is also given. 
 Note that `kplane` is not necessarily the local crossing number of the drawing, but the `klim` that the code was subject to when it constructed the drawing (so the local crossing number is at most `kplane`, but could be less).
+
+## Computed quasiplane drawings
+
+The repository [quasiDrawings](https://github.com/driverag22/quasiDrawings) contains quasiplane drawings (usually both `json` and `graphml` files) of various graphs, including, for example, all graphs on 11 vertices with 
+$51$ edges $(6.5\cdot 11 - 20=51.5)$, at directory `./K11_minus_4`.
+Generally they are exhaustive, meaning that all drawings (up to strong isomorphism) are stored.
