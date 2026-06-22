@@ -1246,6 +1246,8 @@ struct Drawing {
 
         root["kplane"] = kplane;
         root["num_vertices"] = vertices.size();
+        root["num_edges"] = edges.size();
+        root["num_crossings"] = crossings.size();
         root["abstract_graph"] = extract_abstract_graph();
         root["drawing_recipe"] = extract_drawing_recipe();
         return root;
