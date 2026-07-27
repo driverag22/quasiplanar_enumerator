@@ -6,24 +6,76 @@
 typedef std::vector<std::size_t> Edge;
 typedef std::vector<Edge> Edges;
 
-const std::size_t n = 12; // 58 edges for optimal quasi
-const Edges edges = // 57 + 1 = 58
-{
-    {0,10},{1,10},{2,10},{3,10},{4,10},{5,10},
-    {0,11},{1,11},{2,11},{3,11},{4,11},{10,11},  //bistar_eq
-    // {4,11},{5,11},{6,11},{7,11},{8,11},{9,11},   //bistar_sep
-};
+const std::size_t n = 14; // 58 edges for optimal quasi
+// const Edges edges = // 57 + 1 = 58
+// {
+//     {0,10},{1,10},{2,10},{3,10},{4,10},{5,10},
+//     {4,11},{5,11},{6,11},{7,11},{8,11},{9,11},   //bistar_sep
+// };
 
-const std::size_t klim = 17; // leq 2n-7=17
+const std::size_t klim = 21; // leq 2n-7=21
+
+// Helper function to generate the 1260 combinations of edges
+std::vector<Edges> generate_edge_sets() {
+    std::vector<Edges> all_edge_sets;
+    
+    // Mask for 10 choose 5 (5 zeros, 5 ones ensures sorted order)
+    std::vector<int> mask_a(10, 0);
+    std::fill(mask_a.end() - 5, mask_a.end(), 1);
+
+    do {
+        std::vector<std::size_t> Ca, Cb; // Ca = neighbors of a & c, Cb = neighbors of b
+        for (std::size_t i = 0; i < 10; ++i) {
+            if (mask_a[i]) Ca.push_back(i);
+            else Cb.push_back(i);
+        }
+
+        // Mask for 5 choose 4 (1 zero, 4 ones ensures sorted order)
+        // Selects 4 vertices from Cb for d
+        std::vector<int> mask_d(5, 0);
+        std::fill(mask_d.end() - 4, mask_d.end(), 1);
+
+        do {
+            Edges current_edges;
+            
+            // 1. Connect a (10) and c (12) to the same 5 vertices in K10
+            for (std::size_t v : Ca) {
+                current_edges.push_back({v, 10});
+                current_edges.push_back({v, 12});
+            }
+            
+            // 2. Connect b (11) to the remaining 5 vertices in K10
+            for (std::size_t v : Cb) current_edges.push_back({v, 11});
+
+            // 3. Connect d (13) to 4 out of b's 5 neighbors
+            for (std::size_t i = 0; i < 5; ++i)
+                if (mask_d[i]) current_edges.push_back({Cb[i], 13});
+            
+            // 4. Add K4 clique edges among a(10), b(11), c(12), d(13)
+            current_edges.push_back({10, 11}); // a-b
+            current_edges.push_back({10, 12}); // a-c
+            current_edges.push_back({10, 13}); // a-d
+            current_edges.push_back({11, 12}); // b-c
+            current_edges.push_back({11, 13}); // b-d
+            current_edges.push_back({12, 13}); // c-d
+            
+            all_edge_sets.push_back(current_edges);
+        } while (std::next_permutation(mask_d.begin(), mask_d.end()));
+    } while (std::next_permutation(mask_a.begin(), mask_a.end()));
+
+    return all_edge_sets;
+}
 
 int main() {
     std::vector< Drawing<klim> > solutions;
-    std::size_t counter = 0;
-    std::cout << "\n\n ===================================================== \n star\n";
+    std::cout << "\n\n ===================================================== \n\n";
     std::cout << "k = " << klim << ", n = " << n  << std::endl;
 
+    std::vector<Edges> all_edge_sets = generate_edge_sets();
+    std::size_t total_edge_sets = all_edge_sets.size();
+
     for (int i = 0; i < 9; i++) {
-        std::cout << "K10 drawing " << i << std::endl;
+        // std::cout << "K10 drawing " << i << std::endl;
         std::string name = "../quasiDrawings/K10_all_quasi/" + std::to_string(i);
         std::string jsonFile = name + ".json";
         std::ifstream input_file(jsonFile);
@@ -32,70 +84,81 @@ int main() {
         input_file.close();
 
         // loading drawing
-        Drawing<klim> d(import_data, n);
-                auto start_edge = edges.begin();
+        Drawing<klim> base_drawing(import_data, n);
+        std::size_t verified_sets = 0;
 
-        for (auto e = start_edge;;) {
-            std::size_t u = (*e)[0];
-            std::size_t v = (*e)[1];
-            HdsPath p = d.first_path(u, v);
-            if (p.empty()) {
+        for (const auto& current_edges : all_edge_sets) {
+            verified_sets++;
+
+            // 1. Dynamic status line updated in-place using \r and std::flush
+            std::cout << "\r[Drawing " << i << "/8] Solutions found: " << solutions.size()
+                      << " | Edge sets verified: " << verified_sets << "/" << total_edge_sets
+                      << "   " << std::flush;
+
+            auto start_edge = current_edges.begin();
+            // 3. Utilize the implemented copy constructor to reset state[cite: 1]
+            Drawing<klim> d(base_drawing);
+            for (auto e = start_edge;;) {
+                std::size_t u = (*e)[0];
+                std::size_t v = (*e)[1];
+                HdsPath p = d.first_path(u, v);
+                if (p.empty()) {
 BACKUP:
-                // no way to add uv -> do previous edges differently
-                do {
-                    if (e == start_edge) {
-                        goto NEXT_JSON;
-                    }
-                    --e;
+                    // no way to add uv -> do previous edges differently
+                    do {
+                        if (e == start_edge) {
+                            goto NEXT_EDGE_SET;
+                        }
+                        --e;
 
-                    u = (*e)[0];
-                    assert(u == d.edges.back().u);
-                    v = (*e)[1];
-                    assert(v == d.edges.back().v);
-                    p = d.edges.back().built;
-                    d.remove_edge();
-                } while (!d.next_path(p, v));
-            }
-            d.add_edge(p, v);
-
-            if (++e == edges.end()) {
-                if (!d.verify_quasiplanarity()) std::cout << "not quasi?\n";
-
-                bool newSol = true;
-                for (auto it = solutions.begin(); it != solutions.end(); it++) {
-                    if(are_isomorphic((*it),d)) {
-                        newSol = false;
-                        break;
-                    }
+                        u = (*e)[0];
+                        assert(u == d.edges.back().u);
+                        v = (*e)[1];
+                        assert(v == d.edges.back().v);
+                        p = d.edges.back().built;
+                        d.remove_edge();
+                    } while (!d.next_path(p, v));
                 }
-                if (newSol) {
-                    solutions.push_back(d); 
-                    std::cout << counter++ << std::endl;
+                d.add_edge(p, v);
+
+                if (++e == current_edges.end()) {
+                    if (!d.verify_quasiplanarity()) std::cout << "not quasi?\n";
+
+                    bool newSol = true;
+                    for (auto it = solutions.begin(); it != solutions.end(); it++) {
+                        if(are_isomorphic((*it),d)) {
+                            newSol = false;
+                            break;
+                        }
+                    }
+                    if (newSol) solutions.push_back(d); 
+                    goto BACKUP;
                 }
-                goto BACKUP;
             }
+NEXT_EDGE_SET:;
         }
-NEXT_JSON:;
+        std::cout << std::endl;
     }
 
-    std::size_t idx = 0;
+    // std::size_t idx = 0;
      if (solutions.size() == 0) {
-         std::cout << "Not solutions!"  << std::endl;
+         std::cout << "No solutions!"  << std::endl;
          return 0;
      }
+     std::cout << "TOTAL NUMBER OF SOLUTIONS: " << solutions.size() << std::endl;
 
-    for (auto it = solutions.begin();it!=solutions.end();it++) {
-        std::string filename = "../quasiDrawings/maxQuasi/K12_min_bistar_eq/" + std::to_string(idx) + ".json";
-        std::ofstream of_json(filename);
-        nlohmann::ordered_json output_json = (*it).serialize_to_json();
-        of_json << output_json.dump(4);
-        of_json.close();
+    // for (auto it = solutions.begin();it!=solutions.end();it++) {
+    //     std::string filename = "../quasiDrawings/maxQuasi/K12_min_bistar_eq/" + std::to_string(idx) + ".json";
+    //     std::ofstream of_json(filename);
+    //     nlohmann::ordered_json output_json = (*it).serialize_to_json();
+    //     of_json << output_json.dump(4);
+    //     of_json.close();
 
-        std::string filename2 = "../quasiDrawings/maxQuasi/K12_min_bistar_eq/" + std::to_string(idx) + ".graphml";
-        std::ofstream of_graphml(filename2);
-        (*it).graphml_output(of_graphml);
-        of_graphml.close();
-        idx++;
-    }
+    //     std::string filename2 = "../quasiDrawings/maxQuasi/K12_min_bistar_eq/" + std::to_string(idx) + ".graphml";
+    //     std::ofstream of_graphml(filename2);
+    //     (*it).graphml_output(of_graphml);
+    //     of_graphml.close();
+    //     idx++;
+    // }
     return 0;
 }
