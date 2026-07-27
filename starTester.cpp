@@ -7,18 +7,18 @@ typedef std::vector<std::size_t> Edge;
 typedef std::vector<Edge> Edges;
 
 const std::size_t n = 14; // 58 edges for optimal quasi
-// const Edges edges = // 57 + 1 = 58
-// {
-//     {0,10},{1,10},{2,10},{3,10},{4,10},{5,10},
-//     {4,11},{5,11},{6,11},{7,11},{8,11},{9,11},   //bistar_sep
-// };
+                          // const Edges edges = // 57 + 1 = 58
+                          // {
+                          //     {0,10},{1,10},{2,10},{3,10},{4,10},{5,10},
+                          //     {4,11},{5,11},{6,11},{7,11},{8,11},{9,11},   //bistar_sep
+                          // };
 
 const std::size_t klim = 21; // leq 2n-7=21
 
 // Helper function to generate the 1260 combinations of edges
 std::vector<Edges> generate_edge_sets() {
     std::vector<Edges> all_edge_sets;
-    
+
     // Mask for 10 choose 5 (5 zeros, 5 ones ensures sorted order)
     std::vector<int> mask_a(10, 0);
     std::fill(mask_a.end() - 5, mask_a.end(), 1);
@@ -37,20 +37,20 @@ std::vector<Edges> generate_edge_sets() {
 
         do {
             Edges current_edges;
-            
+
             // 1. Connect a (10) and c (12) to the same 5 vertices in K10
             for (std::size_t v : Ca) {
                 current_edges.push_back({v, 10});
                 current_edges.push_back({v, 12});
             }
-            
+
             // 2. Connect b (11) to the remaining 5 vertices in K10
             for (std::size_t v : Cb) current_edges.push_back({v, 11});
 
             // 3. Connect d (13) to 4 out of b's 5 neighbors
             for (std::size_t i = 0; i < 5; ++i)
                 if (mask_d[i]) current_edges.push_back({Cb[i], 13});
-            
+
             // 4. Add K4 clique edges among a(10), b(11), c(12), d(13)
             current_edges.push_back({10, 11}); // a-b
             current_edges.push_back({10, 12}); // a-c
@@ -58,7 +58,7 @@ std::vector<Edges> generate_edge_sets() {
             current_edges.push_back({11, 12}); // b-c
             current_edges.push_back({11, 13}); // b-d
             current_edges.push_back({12, 13}); // c-d
-            
+
             all_edge_sets.push_back(current_edges);
         } while (std::next_permutation(mask_d.begin(), mask_d.end()));
     } while (std::next_permutation(mask_a.begin(), mask_a.end()));
@@ -92,8 +92,8 @@ int main() {
 
             // 1. Dynamic status line updated in-place using \r and std::flush
             std::cout << "\r[Drawing " << i << "/8] Solutions found: " << solutions.size()
-                      << " | Edge sets verified: " << verified_sets << "/" << total_edge_sets
-                      << "   " << std::flush;
+                << " | Edge sets verified: " << verified_sets << "/" << total_edge_sets
+                << "   " << std::flush;
 
             auto start_edge = current_edges.begin();
             // 3. Utilize the implemented copy constructor to reset state[cite: 1]
@@ -140,25 +140,26 @@ NEXT_EDGE_SET:;
         std::cout << std::endl;
     }
 
-    // std::size_t idx = 0;
-     if (solutions.size() == 0) {
-         std::cout << "No solutions!"  << std::endl;
-         return 0;
-     }
-     std::cout << "TOTAL NUMBER OF SOLUTIONS: " << solutions.size() << std::endl;
+    if (solutions.size() == 0) {
+        std::cout << "No solutions!"  << std::endl;
+        return 0;
+    }
+    std::cout << "TOTAL NUMBER OF SOLUTIONS: " << solutions.size() << std::endl;
+    if (solutions.size() > 50) return 0;
 
-    // for (auto it = solutions.begin();it!=solutions.end();it++) {
-    //     std::string filename = "../quasiDrawings/maxQuasi/K12_min_bistar_eq/" + std::to_string(idx) + ".json";
-    //     std::ofstream of_json(filename);
-    //     nlohmann::ordered_json output_json = (*it).serialize_to_json();
-    //     of_json << output_json.dump(4);
-    //     of_json.close();
+    std::size_t idx = 0;
+    for (auto it = solutions.begin();it!=solutions.end();it++) {
+        std::string filename = "../quasiDrawings/maxQuasi/14_with_K4/" + std::to_string(idx) + ".json";
+        std::ofstream of_json(filename);
+        nlohmann::ordered_json output_json = (*it).serialize_to_json();
+        of_json << output_json.dump(4);
+        of_json.close();
 
-    //     std::string filename2 = "../quasiDrawings/maxQuasi/K12_min_bistar_eq/" + std::to_string(idx) + ".graphml";
-    //     std::ofstream of_graphml(filename2);
-    //     (*it).graphml_output(of_graphml);
-    //     of_graphml.close();
-    //     idx++;
-    // }
+        std::string filename2 = "../quasiDrawings/maxQuasi/14_with_K4/" + std::to_string(idx) + ".graphml";
+        std::ofstream of_graphml(filename2);
+        (*it).graphml_output(of_graphml);
+        of_graphml.close();
+        idx++;
+    }
     return 0;
 }
