@@ -74,7 +74,7 @@ int main() {
             verified_sets++;
 
             // 1. Dynamic status line updated in-place using \r and std::flush
-            std::cout << "\r[Drawing " << i << "/8] Solutions found: " << solutions.size()
+            std::cout << "\r[Drawing " << (i+1) << "/9] Solutions found: " << solutions.size()
                 << " | Edge sets verified: " << verified_sets << "/" << total_edge_sets
                 << "   " << std::flush;
 

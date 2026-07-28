@@ -47,8 +47,6 @@ bool is_drawing_extendable(const Drawing<klim>& d, std::size_t num_vertices) {
 }
 
 int main() {
-    bool graph_is_maximal = true;
-
     for (int i = 0; i < 18; i++) {
         std::cout << "Drawing " << i << std::endl;
         std::string filename = "../quasiDrawings/maxQuasi/14_with_K4/" + std::to_string(i) + ".json";
