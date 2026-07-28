@@ -640,14 +640,14 @@ struct Drawing {
 
                     if (p[ci] == v_end) { 
                         p[ci] = v_start; 
-                        jumped[x] = 1; // Mark as jumped
+                        jumped[x] = 1; // mark as jumped to avoid infinite looping
                         changed = true; 
-                        break; // Restart the while loop safely
+                        break;
                     } else if (p[ci] == v_start) { 
                         p[ci] = v_end; 
-                        jumped[x] = 1; // Mark as jumped
+                        jumped[x] = 1;
                         changed = true; 
-                        break; // Restart the while loop safely
+                        break;
                     }
                 }
             }
@@ -655,10 +655,10 @@ struct Drawing {
             if (p[ci] == stop_condition) break;
 
 
-            // avoid crossing edges with overlapping nodes
+            // avoid crossing edges with overlapping nodes, avoid crossing edge with max_crossings crossings
             if (p[ci]->edge->u == u || p[ci]->edge->u == v ||
-                    p[ci]->edge->v == u || p[ci]->edge->v == v ||
-                    p[ci]->edge->ncr >= max_crossings) {
+                p[ci]->edge->v == u || p[ci]->edge->v == v ||
+                p[ci]->edge->ncr >= max_crossings) {
                 continue;
             }
 
@@ -686,7 +686,7 @@ struct Drawing {
             // move to next step
             p[ci+1] = p[ci]->twin;
 
-            if (p.size() == ci + 2) { // last crossing of this edge
+            if (p.size() == ci + 2) { // no more crossings, look for target vertex in current face
                 if (find_target(p, v)) return true;
             } else if (p.size() > ci + 2) { // recurse
                 if (find_crossing(p, v, ci + 1, max_crossings)) return true;
