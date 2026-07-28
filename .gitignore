@@ -9,3 +9,4 @@ jsons/
 build/
 include/
 compile.sh
+.ignore
