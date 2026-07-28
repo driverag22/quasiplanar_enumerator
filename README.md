@@ -3,14 +3,14 @@ A graph $G$ is quasiplanar if it admits a drawing in the plane where no 3 edges 
 This code enumerates all simple quasiplane drawings of a graph up to strong isomorphism.
 
 Based on the code from "On maximal 3-planar graphs" by Michael Hoffmann, Meghana M. Reddy, and Shengzhe Wang (EuroCG 2024), which has been adapted to enumerate quasiplanar graphs 
-and $k$-planar graphs (for arbitrary $k$).
+and $k$-planar graphs (for arbitrary $k\geq0$).
 
  - The file `hds_kplanar.h` contains the code to enumerate $k$-planar graphs for any choice of $k\geq 0$ (generalization of code from paper, which works for $k \leq 3$).
- - The file `hds_quasiplanar.h` contains the code to enumerate quasiplanar graphs with local crossing number $k\geq0$ (parameter).
+ - The file `hds_quasiplanar.h` contains the code to enumerate quasiplanar graphs with local crossing number $0\leq k\geq0$ (parameter).
 
 The local crossing number (`klim`) controls the depth of the recurrence: the higher `klim` the more branching the algorithm do.
 
-The current implementation has a hard-coded limit of 96 edges (via `inline static constexpr std::size_t MAX_EDGES = 96`).
+NOTE: The current implementation has a hard-coded limit of 96 edges (via `inline static constexpr std::size_t MAX_EDGES = 96`).
 
 # JSON drawing representation
 
@@ -30,15 +30,13 @@ First the abstract graph is described, giving the list of edges, described by th
 "abstract_graph": [ [0,1], [0,2], ...]
 ```
 
-The edges are ordered lexicographically.
-
 Then the drawing recipe is given. It describes how to draw the edges in order, meaning that one can just follow the list from top to bottom 
 to draw the graph by hand.
 
 For the first edge it contains the edge label and the two endpoints `u,v`. The first edge is identified by having label `0` and being the first in the recipe.
 
 For subsequent edges it contains a unique label, the labels of edges it crosses, the endpoints `u` and `v`, and label of the edge it "starts after" in the counter-clockwise rotation around `u`.
-Note that therefore the start after edge is also incident on `u`.
+Note that therefore the start after edge is also incident on `u`, and is always drawn before the current edge `(u,v)`.
 
 This drawing_recipe follows the same order as the code itself when constructing a new drawing.
 
@@ -47,6 +45,9 @@ Note that `kplane` is not necessarily the local crossing number of the drawing, 
 
 ## Computed quasiplane drawings
 
-The repository [quasiDrawings](https://github.com/driverag22/quasiDrawings) contains quasiplane drawings (usually both `json` and `graphml` files) of various graphs, including, for example, all graphs on 11 vertices with 
-$51$ edges $(6.5\cdot 11 - 20=51.5)$, at directory `./K11_minus_4`.
-Generally they are exhaustive, meaning that all drawings (up to strong isomorphism) are stored.
+The repository [quasiDrawings](https://github.com/driverag22/quasiDrawings) contains quasiplane drawings (usually both `json` and `graphml` files) of various graphs, including, 
+for example, all graphs on 11 vertices with $51$ edges $(6.5\cdot 11 - 20=51.5)$, in directory `./K11_minus_4`.
+Determining all optimal quasiplanar graphs on 11 vertices is of interest because $K_{10}$ (the complete graph on 10 vertices) is quasiplanar (the 9 drawings of $K_{10}$ can also 
+be found in the repo).
+
+Generally they are exhaustive, meaning that all drawings (up to strong isomorphism) are stored, but this is not always the case.
