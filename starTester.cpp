@@ -24,27 +24,18 @@ std::vector<Edges> generate_edge_sets() {
     std::fill(mask_a.end() - 5, mask_a.end(), 1);
 
     do {
-        std::vector<std::size_t> Ca, Cb; // Ca = neighbors of a & c, Cb = neighbors of b & d
-        for (std::size_t i = 0; i < 10; ++i) {
-            if (mask_a[i]) Ca.push_back(i);
-            else Cb.push_back(i);
-        }
-
         Edges current_edges;
-
-        // 1. Connect a (10) and c (12) to the same 5 vertices in K10
-        for (std::size_t v : Ca) {
-            current_edges.push_back({v, 10});
-            current_edges.push_back({v, 12});
+        for (std::size_t i = 0; i < 10; ++i) {
+            if (mask_a[i]) {
+                current_edges.push_back({i, 10});
+                current_edges.push_back({i, 12});
+            } else {
+                current_edges.push_back({i, 11});
+                current_edges.push_back({i, 13});
+            }
         }
 
-        // 2. Connect b (11) to the remaining 5 vertices in K10
-        for (std::size_t v : Cb) {
-            current_edges.push_back({v, 11});
-            current_edges.push_back({v, 13});
-        }
-
-        // 4. Add K4 clique edges among a(10), b(11), c(12), d(13)
+        // edges between 10,11,12,13
         current_edges.push_back({10, 11}); // a-b
         current_edges.push_back({10, 12}); // a-c
         current_edges.push_back({10, 13}); // a-d
@@ -83,7 +74,7 @@ int main() {
             verified_sets++;
 
             // 1. Dynamic status line updated in-place using \r and std::flush
-            std::cout << "\r[Drawing " << i << "/8] Solutions found: " << solutions.size()
+            std::cout << "\r[Drawing " << (i+1) << "/9] Solutions found: " << solutions.size()
                 << " | Edge sets verified: " << verified_sets << "/" << total_edge_sets
                 << "   " << std::flush;
 
