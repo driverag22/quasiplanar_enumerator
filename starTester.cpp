@@ -15,7 +15,7 @@ const std::size_t n = 14; // 58 edges for optimal quasi
 
 const std::size_t klim = 21; // leq 2n-7=21
 
-// Helper function to generate the 1260 combinations of edges
+// Helper function to generate the 10choose5 combinations of edges
 std::vector<Edges> generate_edge_sets() {
     std::vector<Edges> all_edge_sets;
 
@@ -24,43 +24,35 @@ std::vector<Edges> generate_edge_sets() {
     std::fill(mask_a.end() - 5, mask_a.end(), 1);
 
     do {
-        std::vector<std::size_t> Ca, Cb; // Ca = neighbors of a & c, Cb = neighbors of b
+        std::vector<std::size_t> Ca, Cb; // Ca = neighbors of a & c, Cb = neighbors of b & d
         for (std::size_t i = 0; i < 10; ++i) {
             if (mask_a[i]) Ca.push_back(i);
             else Cb.push_back(i);
         }
 
-        // Mask for 5 choose 4 (1 zero, 4 ones ensures sorted order)
-        // Selects 4 vertices from Cb for d
-        std::vector<int> mask_d(5, 0);
-        std::fill(mask_d.end() - 4, mask_d.end(), 1);
+        Edges current_edges;
 
-        do {
-            Edges current_edges;
+        // 1. Connect a (10) and c (12) to the same 5 vertices in K10
+        for (std::size_t v : Ca) {
+            current_edges.push_back({v, 10});
+            current_edges.push_back({v, 12});
+        }
 
-            // 1. Connect a (10) and c (12) to the same 5 vertices in K10
-            for (std::size_t v : Ca) {
-                current_edges.push_back({v, 10});
-                current_edges.push_back({v, 12});
-            }
+        // 2. Connect b (11) to the remaining 5 vertices in K10
+        for (std::size_t v : Cb) {
+            current_edges.push_back({v, 11});
+            current_edges.push_back({v, 13});
+        }
 
-            // 2. Connect b (11) to the remaining 5 vertices in K10
-            for (std::size_t v : Cb) current_edges.push_back({v, 11});
+        // 4. Add K4 clique edges among a(10), b(11), c(12), d(13)
+        current_edges.push_back({10, 11}); // a-b
+        current_edges.push_back({10, 12}); // a-c
+        current_edges.push_back({10, 13}); // a-d
+        current_edges.push_back({11, 12}); // b-c
+        current_edges.push_back({11, 13}); // b-d
+        // current_edges.push_back({12, 13}); // c-d
 
-            // 3. Connect d (13) to 4 out of b's 5 neighbors
-            for (std::size_t i = 0; i < 5; ++i)
-                if (mask_d[i]) current_edges.push_back({Cb[i], 13});
-
-            // 4. Add K4 clique edges among a(10), b(11), c(12), d(13)
-            current_edges.push_back({10, 11}); // a-b
-            current_edges.push_back({10, 12}); // a-c
-            current_edges.push_back({10, 13}); // a-d
-            current_edges.push_back({11, 12}); // b-c
-            current_edges.push_back({11, 13}); // b-d
-            current_edges.push_back({12, 13}); // c-d
-
-            all_edge_sets.push_back(current_edges);
-        } while (std::next_permutation(mask_d.begin(), mask_d.end()));
+        all_edge_sets.push_back(current_edges);
     } while (std::next_permutation(mask_a.begin(), mask_a.end()));
 
     return all_edge_sets;
@@ -149,13 +141,13 @@ NEXT_EDGE_SET:;
 
     std::size_t idx = 0;
     for (auto it = solutions.begin();it!=solutions.end();it++) {
-        std::string filename = "../quasiDrawings/maxQuasi/14_with_K4/" + std::to_string(idx) + ".json";
+        std::string filename = "../quasiDrawings/maxQuasi/14_v2/" + std::to_string(idx) + ".json";
         std::ofstream of_json(filename);
         nlohmann::ordered_json output_json = (*it).serialize_to_json();
         of_json << output_json.dump(4);
         of_json.close();
 
-        std::string filename2 = "../quasiDrawings/maxQuasi/14_with_K4/" + std::to_string(idx) + ".graphml";
+        std::string filename2 = "../quasiDrawings/maxQuasi/14_v2/" + std::to_string(idx) + ".graphml";
         std::ofstream of_graphml(filename2);
         (*it).graphml_output(of_graphml);
         of_graphml.close();
