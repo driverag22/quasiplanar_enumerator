@@ -59,7 +59,6 @@ int main() {
 
         if (is_drawing_extendable(d, n)) {
             std::cout << " -> EXTENDABLE (Not maximal)\n";
-            graph_is_maximal = false;
         } else {
             std::cout << " -> MAXIMAL\n";
         }

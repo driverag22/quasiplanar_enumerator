@@ -6,8 +6,8 @@
 typedef std::vector<std::size_t> Edge;
 typedef std::vector<Edge> Edges;
 
-const std::size_t n = 14; // 58 edges for optimal quasi
-const std::size_t klim = 21; // leq 2n-7=21
+const std::size_t n = 12; // 58 edges for optimal quasi
+const std::size_t klim = 17; // leq 2n-7
 
 std::vector<std::pair<std::size_t, std::size_t>> get_missing_edges(const Drawing<klim>& d, std::size_t num_vertices) {
     std::vector<std::vector<bool>> adj(num_vertices, std::vector<bool>(num_vertices, false));
@@ -45,35 +45,41 @@ bool is_drawing_extendable(const Drawing<klim>& d, std::size_t num_vertices) {
     return false;
 }
 
-// Helper function to generate the 10choose5 combinations of edges
+// function to generate the 10choose5 combinations of edges
 std::vector<Edges> generate_edge_sets() {
     std::vector<Edges> all_edge_sets;
 
-    // Mask for 10 choose 5 (5 zeros, 5 ones ensures sorted order)
+    // 10 choose 6
     std::vector<int> mask_a(10, 0);
-    std::fill(mask_a.end() - 5, mask_a.end(), 1);
+    std::fill(mask_a.end() - 6, mask_a.end(), 1);
 
     do {
-        Edges current_edges;
+        std::vector<std::size_t> Ca, R; // Ca = 6 neighbors of a, R = 4 remaining vertices
         for (std::size_t i = 0; i < 10; ++i) {
-            if (mask_a[i]) {
-                current_edges.push_back({i, 10});
-                current_edges.push_back({i, 12});
-            } else {
-                current_edges.push_back({i, 11});
-                current_edges.push_back({i, 13});
-            }
+            if (mask_a[i]) Ca.push_back(i);
+            else R.push_back(i);
         }
 
-        // edges between 10,11,12,13
-        current_edges.push_back({10, 11}); // a-b
-        current_edges.push_back({10, 12}); // a-c
-        current_edges.push_back({10, 13}); // a-d
-        current_edges.push_back({11, 12}); // b-c
-        current_edges.push_back({11, 13}); // b-d
-        // current_edges.push_back({12, 13}); // c-d
+        // 6 choose 2
+        std::vector<int> mask_b(6, 0);
+        std::fill(mask_b.end() - 2, mask_b.end(), 1);
 
-        all_edge_sets.push_back(current_edges);
+        do {
+            Edges current_edges;
+
+            // connect a (10) to its 6 chosen vertices in K10
+            for (std::size_t v : Ca) current_edges.push_back({v, 10});
+
+            // connect b (11) to all 4 remaining vertices (R)
+            for (std::size_t v : R) current_edges.push_back({v, 11});
+
+            // connect b (11) to 2 overlapping vertices
+            for (std::size_t i = 0; i < 6; ++i)
+                if (mask_b[i]) current_edges.push_back({Ca[i], 11});
+
+            // current_edges.push_back({10, 11});
+            all_edge_sets.push_back(current_edges);
+        } while (std::next_permutation(mask_b.begin(), mask_b.end()));
     } while (std::next_permutation(mask_a.begin(), mask_a.end()));
 
     return all_edge_sets;
@@ -145,10 +151,7 @@ BACKUP:
                         }
                     }
                     if (newSol) {
-                        if (is_drawing_extendable(d, n)) {
-                            std::cout << "Not maximal!" << std::endl;
-                            return 0;
-                        }
+                        if (is_drawing_extendable(d, n)) return 0;
                         solutions.push_back(d); 
                     }
                     goto BACKUP;
@@ -160,7 +163,7 @@ NEXT_EDGE_SET:;
     }
 
     if (solutions.size() == 0) {
-        std::cout << "No solutions!"  << std::endl;
+        std::cout << "NO SOLUTIONS!"  << std::endl;
         return 0;
     }
     std::cout << "GRAPH IS MAXIMAL QUASIPLANAR, TOTAL NUMBER OF SOLUTIONS: " << solutions.size() << std::endl;
@@ -168,13 +171,13 @@ NEXT_EDGE_SET:;
 
     std::size_t idx = 0;
     for (auto it = solutions.begin();it!=solutions.end();it++) {
-        std::string filename = "../quasiDrawings/maxQuasi/14_v2/" + std::to_string(idx) + ".json";
+        std::string filename = "../quasiDrawings/maxQuasi/13_with_K3/" + std::to_string(idx) + ".json";
         std::ofstream of_json(filename);
         nlohmann::ordered_json output_json = (*it).serialize_to_json();
         of_json << output_json.dump(4);
         of_json.close();
 
-        std::string filename2 = "../quasiDrawings/maxQuasi/14_v2/" + std::to_string(idx) + ".graphml";
+        std::string filename2 = "../quasiDrawings/maxQuasi/13_with_K3/" + std::to_string(idx) + ".graphml";
         std::ofstream of_graphml(filename2);
         (*it).graphml_output(of_graphml);
         of_graphml.close();

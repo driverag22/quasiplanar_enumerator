@@ -1020,7 +1020,7 @@ struct Drawing {
             if (cr == 0) {
                 color = "00CC00"; // Green
             } else if (cr == 1) {
-                color = "FFCC00"; // Yellow
+                color = "05FCCA"; // Cyan
             } else if (cr == 2) {
                 color = "FFA500"; // Orange
             } else if (cr == 3) {
