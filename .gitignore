@@ -1,6 +1,7 @@
 .bin/
 drawings/
 jsons/
+dataAnalysis/
 *.slurm
 *.err
 *.log

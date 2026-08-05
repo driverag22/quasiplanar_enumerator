@@ -1015,27 +1015,26 @@ struct Drawing {
             if (v < vertices.size())
                 o << "v" << v; else o << "c" << v - vertices.size();
             o << "\"";
-            std::string color; // >= 3 crossings: blue
-            std::string width = "1.5";
+
+            std::string line_style;
             if (cr == 0) {
-                color = "00CC00"; // Green
+                line_style = "color=\"#00CC00\" type=\"line\" width=\"2.5\"";
             } else if (cr == 1) {
-                color = "05FCCA"; // Cyan
+                line_style = "color=\"#FFFF00\" type=\"line\" width=\"2.5\"";
             } else if (cr == 2) {
-                color = "FFA500"; // Orange
+                line_style = "color=\"#ED872D\" type=\"line\" width=\"2.5\"";
             } else if (cr == 3) {
-                color = "FF0000"; // Red
+                line_style = "color=\"#FF0000\" type=\"line\" width=\"2.5\"";
             } else if (cr == 4) {
-                color = "9933CC"; // Purple
+                line_style = "color=\"#0000FF\" type=\"line\" width=\"2.5\"";
             } else {
-                color = "0000FF"; // Blue
+                line_style = "color=\"#1F1F1F\" type=\"line\" width=\"1.0\"";
             }
 
             o << ">\n"
                 << "      <data key=\"d9\">\n"
                 << "        <y:PolyLineEdge>\n"
-                << "          <y:LineStyle color=\"#" << color << "\" "
-                <<                "type=\"line\" width=\"" << width << "\"/>\n"
+                << "          <y:LineStyle " << line_style << "/>\n"
                 << "          <y:BendStyle smoothed=\"true\"/>\n"
                 << "        </y:PolyLineEdge>\n"
                 << "      </data>\n"
