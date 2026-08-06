@@ -30,8 +30,8 @@ Edges generate3C14Graph() {
 
     // 4. middle to outer connections at distance 3
     for (std::size_t i = 0; i < 14; ++i) {
-        if (i % 2 == 0) edges.push_back({i, 14 + ((i + 3) % 14)});
-        else if (i % 2 == 1) edges.push_back({i, 14 + ((i + 11) % 14)});
+        if (i % 2 == 0) edges.push_back({14 + i, 14 + ((i + 3) % 14)});
+        else if (i % 2 == 1) edges.push_back({14 + i, 14 + ((i + 11) % 14)});
     }
 
     // 5. outer C14 cycle (Vertices 28..41)
