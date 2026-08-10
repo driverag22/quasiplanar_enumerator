@@ -125,11 +125,11 @@ bool is_drawing_extendable(const Drawing<klim>& d, std::size_t num_vertices) {
 
 int main() {
     std::cout << "\n\n ===================================================== \n";
-    std::cout << "k = " << klim << ", n = " << n << std::endl;
+    std::cout << "c14, genNonQuasi, k = " << klim << ", n = " << n << std::endl;
     const Edges edges = genNonQuasi();
     // const std::size_t minimal_cr = 0;
     std::vector< Drawing<klim> > solutions;
-    std::vector<std::size_t> d_cnt(10000,0); // assume no more than 10000 unique drawings up to iso
+    std::vector<std::size_t> d_cnt(30000,0); // assume no more than 10000 unique drawings up to iso
 
     Drawing<klim> d(n);
     // Edge 0: (0,1)
