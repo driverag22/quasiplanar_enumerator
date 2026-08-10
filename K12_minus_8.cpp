@@ -1,13 +1,12 @@
 #include "hds_quasiplanar.h"
 #include <fstream>
-#include <set>
 
 typedef std::vector<std::size_t> Edge;
 typedef std::vector<Edge> Edges;
 
 const std::size_t n = 12; // note hard-coded limit of 64 edges for quasiplanar...
 const std::size_t klim = 17; // 2n-7 = 17
-const std::string split = "1";
+const std::string split = "1b";
 
 struct EdgeSetWithMissing {
     Edges edges;
@@ -17,9 +16,9 @@ struct EdgeSetWithMissing {
 std::vector<EdgeSetWithMissing> generate_edge_sets() {
     const bool r_masks[4][5] = {
         {1, 0, 1, 0, 0}, // ra: {7, 9}
-          {1, 1, 1, 1, 0}, // rb: {7, 8, 9, 10}
-          {0, 1, 0, 1, 1}, // rc: {8, 10, 11}
-          {0, 1, 0, 0, 1}  // rd: {8, 11}
+        {1, 1, 1, 1, 0}, // rb: {7, 8, 9, 10}
+        {1, 1, 0, 1, 1}, // rc: {7, 8, 10, 11}
+        {0, 1, 0, 0, 1}  // rd: {8, 11}
     };
     std::vector<EdgeSetWithMissing> all_edge_sets;
 
@@ -84,6 +83,8 @@ int main() {
     std::cout << "\n\n ===================================================== \n";
     std::cout << "k = " << klim << ", n = " << n  << ", split = " << split << std::endl;
 
+    std::vector<EdgeSetWithMissing> all_edge_sets = generate_edge_sets();
+    std::size_t total_edge_sets = all_edge_sets.size();
     for (int i = 0; i < 1607; i++) {
         std::cout << "Drawing " << std::to_string(i) << std::endl;
 
@@ -91,9 +92,6 @@ int main() {
         nlohmann::json import_data; input_file >> import_data; input_file.close();
         // loading drawing
         Drawing<klim> d(import_data, n);
-
-        std::vector<EdgeSetWithMissing> all_edge_sets = generate_edge_sets();
-        std::size_t total_edge_sets = all_edge_sets.size();
 
         int idx = 0;
         for (const auto& item : all_edge_sets) {
