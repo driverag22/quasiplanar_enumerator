@@ -2,7 +2,7 @@
 #include "hds_kplanar.h"
 #include "iso.h"
 //#include <sstream>
-#include <fstream>
+// #include <fstream>
 
 typedef std::vector<std::size_t> Edge;
 typedef std::vector<Edge> Edges;
@@ -28,15 +28,63 @@ Edges generate3C14Graph() {
     for (std::size_t i = 0; i < 14; ++i)
         edges.push_back({14 + i, 14 + ((i + 1) % 14)});
 
-    // 4. middle to outer connections at distance 3
+    // // 4. middle to outer connections at distance 3
+    // for (std::size_t i = 0; i < 14; ++i) {
+    //     if (i % 2 == 0) edges.push_back({14 + i, 14 + ((i + 3) % 14)});
+    //     else if (i % 2 == 1) edges.push_back({14 + i, 14 + ((i + 11) % 14)});
+    // }
+
+    // // 5. outer C14 cycle (Vertices 28..41)
+    // for (std::size_t i = 0; i < 14; ++i)
+    //     edges.push_back({28 + i, 28 + ((i + 1) % 14)});
+
+    // 5b. Outer C14 chords at distance 2
+    // for (std::size_t i = 0; i < 14; ++i)
+    //     edges.push_back({28 + i, 28 + ((i + 2) % 14)});
+
+    return edges;
+}
+
+Edges genNonQuasi() {
+    Edges edges;
+
+    // 1. inner C14 cycle (Vertices 0..13) - FIXED FIRST EDGES
+    for (std::size_t i = 0; i < 14; ++i)
+        edges.push_back({i, (i + 1) % 14});
+
+    // 1b. inner C14 chords at distance 2
+    // for (std::size_t i = 0; i < 14; ++i)
+    //     edges.push_back({i, (i + 2) % 14});
+
+    // 2. inner to middle connections at distance 2
     for (std::size_t i = 0; i < 14; ++i) {
-        if (i % 2 == 0) edges.push_back({14 + i, 14 + ((i + 3) % 14)});
-        else if (i % 2 == 1) edges.push_back({14 + i, 14 + ((i + 11) % 14)});
+        if (i % 2 == 0) {
+            edges.push_back({i, 14 + ((i + 2) % 14)});
+            edges.push_back({i, 14 + ((i + 12) % 14)});
+        } else {
+            edges.push_back({i, 14 + i});
+            edges.push_back({i, 14 + ((i + 1) % 14)});
+        }
     }
 
-    // 5. outer C14 cycle (Vertices 28..41)
+    // 3. middle C14 cycle (Vertices 14..27)
     for (std::size_t i = 0; i < 14; ++i)
-        edges.push_back({28 + i, 28 + ((i + 1) % 14)});
+        edges.push_back({14 + i, 14 + ((i + 1) % 14)});
+
+    // // 4. middle to outer connections at distance 3
+    // for (std::size_t i = 0; i < 14; ++i) {
+    //     if (i % 2 == 0) {
+    //         edges.push_back({14 + i, 28 + ((i + 2) % 14)});
+    //         edges.push_back({14 + i, 28 + ((i + 12) % 14)});
+    //     } else {
+    //         edges.push_back({14 + i, 28 + i});
+    //         edges.push_back({14 + i, 28 + ((i + 1) % 14)});
+    //     }
+    // }
+
+    // // 5. outer C14 cycle (Vertices 28..41)
+    // for (std::size_t i = 0; i < 14; ++i)
+    //     edges.push_back({28 + i, 28 + ((i + 1) % 14)});
 
     // 5b. Outer C14 chords at distance 2
     // for (std::size_t i = 0; i < 14; ++i)
@@ -78,7 +126,7 @@ bool is_drawing_extendable(const Drawing<klim>& d, std::size_t num_vertices) {
 int main() {
     std::cout << "\n\n ===================================================== \n";
     std::cout << "k = " << klim << ", n = " << n << std::endl;
-    const Edges edges = generate3C14Graph();
+    const Edges edges = genNonQuasi();
     // const std::size_t minimal_cr = 0;
     std::vector< Drawing<klim> > solutions;
     std::vector<std::size_t> d_cnt(10000,0); // assume no more than 10000 unique drawings up to iso
@@ -148,7 +196,7 @@ BACKUP:
                 solutions.push_back(d);
                 // if (is_drawing_extendable(d,n)) std::cout << "Not maximal!" << std::endl;
                 // minimal_cr = std::min(minimal_cr, d.crossings.size());
-                if (++counter % 25 == 0) std::cout << counter << std::endl;
+                if (++counter % 25 == 0) std::cout << "\r Solutions found: " << counter << std::flush;
             }
             goto BACKUP;
         }
