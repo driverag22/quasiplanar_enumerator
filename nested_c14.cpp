@@ -1,5 +1,5 @@
-// #include "hds_quasiplanar.h"
-#include "hds_kplanar.h"
+#include "hds_quasiplanar.h"
+// #include "hds_kplanar.h"
 #include "iso.h"
 //#include <sstream>
 // #include <fstream>
@@ -53,8 +53,8 @@ Edges genNonQuasi() {
         edges.push_back({i, (i + 1) % 14});
 
     // 1b. inner C14 chords at distance 2
-    // for (std::size_t i = 0; i < 14; ++i)
-    //     edges.push_back({i, (i + 2) % 14});
+    for (std::size_t i = 0; i < 14; ++i)
+        edges.push_back({i, (i + 2) % 14});
 
     // 2. inner to middle connections at distance 2
     for (std::size_t i = 0; i < 14; ++i) {
