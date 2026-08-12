@@ -10,7 +10,7 @@ typedef std::vector<Edge> Edges;
 
 const std::size_t n = 12;      // Total vertices
 const std::size_t klim = 17;   // 2n - 7 = 17
-const std::string split = "1";
+const std::string split = "3";
 
 struct EdgeSetWithMissing {
     Edges edges;
@@ -25,55 +25,45 @@ std::vector<EdgeSetWithMissing> generate_edge_sets() {
     for (std::size_t u = 6; u < 12; ++u) for (std::size_t v = u + 1; v < 12; ++v)
             base_v2_edges.push_back({u, v});
 
-    // select s1 (source vertex connecting to target t1)
-    for (std::size_t s1 = 0; s1 < 6; ++s1) {
-        // 2. select s2,s3 (sources connecting to target t2)
-        for (std::size_t s2 = 0; s2 < 6; ++s2) {
-            if (s2 == s1) continue;
-            for (std::size_t s3 = s2 + 1; s3 < 6; ++s3) {
-                if (s3 == s1) continue;
+    // mask to select 3 source vertices from {0, 1, 2, 3, 4, 5}
+    std::vector<int> mask(6, 0);
+    std::fill(mask.end() - 3, mask.end(), 1);
 
-                // select target t1 (1 non-neigh)
-                for (std::size_t t1 = 6; t1 < 12; ++t1) {
-                    if (t1 == 6 + s1) continue; // matching edge
+    do {
+        std::vector<std::size_t> sources;
+        for (std::size_t i = 0; i < 6; ++i)
+            if (mask[i]) sources.push_back(i);
+        std::size_t s1 = sources[0], s2 = sources[1], s3 = sources[2];
 
-                    // target t2 (2 non-neighs)
-                    for (std::size_t t2 = 6; t2 < 12; ++t2) {
-                        if (t2 == t1) continue; // distinct targets
-                        if (t2 == 6 + s2 || t2 == 6 + s3) continue;
+        // select target vertex t in V2 = {6, 7, 8, 9, 10, 11}
+        for (std::size_t t = 6; t < 12; ++t) {
+            // skip if t coincides with the matching non-neighbor of s1, s2, or s3
+            if (t == 6 + s1 || t == 6 + s2 || t == 6 + s3) continue;
 
-                        EdgeSetWithMissing item;
-                        item.edges = base_v2_edges;
+            EdgeSetWithMissing item;
+            item.edges = base_v2_edges;
 
-                        // add bipartite edges with boolean checks
-                        for (std::size_t u = 0; u < 6; ++u) {
-                            for (std::size_t v = 6; v < 12; ++v) {
-                                // skip matching edge
-                                if (v == 6 + u) continue;
-                                // skip 3 extra missing edges
-                                if (u == s1 && v == t1) continue;
-                                if (u == s2 && v == t2) continue;
-                                if (u == s3 && v == t2) continue;
+            // bipartite edges
+            for (std::size_t u = 0; u < 6; ++u) {
+                for (std::size_t v = 6; v < 12; ++v) {
+                    if (v == 6 + u) continue; // skip matching
+                    if ((u == s1 || u == s2 || u == s3) && v == t) 
+                        continue; // skip the 3 extra missing edges to target t
 
-                                item.edges.push_back({u, v});
-                            }
-                        }
-
-                        // Populate the 9 missing edges directly
-                        for (std::size_t u = 0; u < 6; ++u) {
-                            item.missing_edges.push_back({u, 6 + u});
-                        }
-                        item.missing_edges.push_back({s1, t1});
-                        item.missing_edges.push_back({s2, t2});
-                        item.missing_edges.push_back({s3, t2});
-
-                        std::sort(item.edges.begin(), item.edges.end());
-                        all_edge_sets.push_back(item);
-                    }
+                    item.edges.push_back({u, v});
                 }
             }
+
+            for (std::size_t u = 0; u < 6; ++u) 
+                item.missing_edges.push_back({u, 6 + u});
+            item.missing_edges.push_back({s1, t});
+            item.missing_edges.push_back({s2, t});
+            item.missing_edges.push_back({s3, t});
+
+            std::sort(item.edges.begin(), item.edges.end());
+            all_edge_sets.push_back(item);
         }
-    }
+    } while (std::next_permutation(mask.begin(), mask.end()));
     return all_edge_sets;
 }
 
@@ -100,7 +90,7 @@ bool is_drawing_extendable(const Drawing<klim>& d,
 
 int main() {
     std::cout << "\n\n ===================================================== \n";
-    std::cout << "k = " << klim << ", n = " << n << ", split = " << split << std::endl;
+    std::cout << "double ico, k = " << klim << ", n = " << n << ", split = " << split << std::endl;
 
     std::vector<EdgeSetWithMissing> all_edge_sets = generate_edge_sets();
     std::size_t total_edge_sets = all_edge_sets.size();
