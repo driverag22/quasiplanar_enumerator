@@ -19,50 +19,54 @@ struct EdgeSetWithMissing {
 
 std::vector<EdgeSetWithMissing> generate_edge_sets() {
     std::vector<EdgeSetWithMissing> all_edge_sets;
-    // fixed bipartite matching
+
+    // Fixed bipartite matching between V1 and V2: (u, u + 6) for u in 0..5
     std::vector<std::pair<std::size_t, std::size_t>> v1_v2_matching;
     for (std::size_t u = 0; u < 6; ++u) v1_v2_matching.push_back({u, 6 + u});
 
-    std::vector<std::size_t> v2 = {6, 7, 8, 9, 10, 11};
+    // target vertex t out of V2 = {6, 7, 8, 9, 10, 11}
+    for (std::size_t t = 6; t < 12; ++t) {
+        std::vector<std::size_t> rem;
+        for (std::size_t v = 6; v < 12; ++v) if (v != t) rem.push_back(v);
 
-    do {
-        // filter for canonical ordering to get exactly the 15 unique pair partitions:
-        //  1. order within each pair: v2[0] < v2[1], v2[2] < v2[3], v2[4] < v2[5]
-        //  2. order across pairs:     v2[0] < v2[2] < v2[4]
-        if (v2[0] >= v2[1] || v2[2] >= v2[3] || v2[4] >= v2[5] ||
-                v2[0] >= v2[2] || v2[2] >= v2[4]) continue;
+        // mask to select 3 non-neighbors out of the 5 remaining
+        std::vector<int> mask = {0, 0, 1, 1, 1};
 
-        EdgeSetWithMissing item;
+        do {
+            std::vector<std::size_t> non_neighs;
+            for (std::size_t i = 0; i < 5; ++i)
+                if (mask[i]) non_neighs.push_back(rem[i]);
 
-        // internal K_6 edges on V2 excluding the current V2 matching
-        for (std::size_t u = 6; u < 12; ++u) {
-            for (std::size_t v = u + 1; v < 12; ++v) {
-                if ((u == v2[0] && v == v2[1]) ||
-                    (u == v2[2] && v == v2[3]) ||
-                    (u == v2[4] && v == v2[5])) {
-                    continue;
+            EdgeSetWithMissing item;
+
+            // internal K_6 edges on V2 excluding (t, non_neighs[i])
+            for (std::size_t u = 6; u < 12; ++u) {
+                for (std::size_t v = u + 1; v < 12; ++v) {
+                    if ((u == t && (v == non_neighs[0] || v == non_neighs[1] || v == non_neighs[2])) 
+                        ||
+                        (v == t && (u == non_neighs[0] || u == non_neighs[1] || u == non_neighs[2])))
+                        continue; // skip the 3 missing edges in V2
+                    item.edges.push_back({u, v});
                 }
-                item.edges.push_back({u, v});
             }
-        }
 
-        // 2. Bipartite edges (V1 x V2) excluding the V1-V2 matching
-        for (std::size_t u = 0; u < 6; ++u) {
-            for (std::size_t v = 6; v < 12; ++v) {
-                if (v == 6 + u) continue; // skip matching
-                item.edges.push_back({u, v});
+            // 2. Bipartite edges (V1 x V2) excluding the V1-V2 matching
+            for (std::size_t u = 0; u < 6; ++u) {
+                for (std::size_t v = 6; v < 12; ++v) {
+                    if (v == 6 + u) continue; // skip matching
+                    item.edges.push_back({u, v});
+                }
             }
-        }
 
-        // 3. Populate all 9 missing edges (6 from V1-V2 + 3 from V2)
-        item.missing_edges = v1_v2_matching;
-        item.missing_edges.push_back({v2[0], v2[1]});
-        item.missing_edges.push_back({v2[2], v2[3]});
-        item.missing_edges.push_back({v2[4], v2[5]});
+            // 3. Populate the 9 missing edges (6 from V1-V2 matching + 3 internal V2)
+            item.missing_edges = v1_v2_matching;
+            for (std::size_t v : non_neighs)
+                item.missing_edges.push_back({std::min(t, v), std::max(t, v)});
 
-        std::sort(item.edges.begin(), item.edges.end());
-        all_edge_sets.push_back(item);
-    } while (std::next_permutation(v2.begin(), v2.end()));
+            std::sort(item.edges.begin(), item.edges.end());
+            all_edge_sets.push_back(item);
+        } while (std::next_permutation(mask.begin(), mask.end()));
+    }
     return all_edge_sets;
 }
 
