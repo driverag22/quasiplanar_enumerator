@@ -6,7 +6,7 @@ typedef std::vector<Edge> Edges;
 
 const std::size_t n = 12; // note hard-coded limit of 64 edges for quasiplanar...
 const std::size_t klim = 17; // 2n-7 = 17
-const std::string split = "1b";
+const std::string split = "3";
 
 struct EdgeSetWithMissing {
     Edges edges;
@@ -15,7 +15,7 @@ struct EdgeSetWithMissing {
 
 std::vector<EdgeSetWithMissing> generate_edge_sets() {
     const bool r_masks[4][5] = {
-        {1, 0, 1, 0, 0}, // ra: {7, 9}
+        {0, 0, 1, 0, 0}, // ra: {-7-, 9}
         {1, 1, 1, 1, 0}, // rb: {7, 8, 9, 10}
         {1, 1, 0, 1, 1}, // rc: {7, 8, 10, 11}
         {0, 1, 0, 0, 1}  // rd: {8, 11}
@@ -93,7 +93,7 @@ int main() {
         // loading drawing
         Drawing<klim> d(import_data, n);
 
-        int idx = 0;
+        int idx = 1;
         for (const auto& item : all_edge_sets) {
             std::cout << "\rPermutation [" << idx << " / " << total_edge_sets << "]" << std::flush;
             const Edges& current_edges = item.edges;
