@@ -1,5 +1,5 @@
-#include "hds_quasiplanar.h"
-// #include "hds_kplanar.h"
+// #include "hds_quasiplanar.h"
+#include "hds_kplanar.h"
 #include "iso.h"
 //#include <sstream>
 // #include <fstream>
@@ -15,8 +15,8 @@ Edges generate3C14Graph() {
         edges.push_back({i, (i + 1) % 14});
 
     // 1b. inner C14 chords at distance 2
-    // for (std::size_t i = 0; i < 14; ++i)
-    //     edges.push_back({i, (i + 2) % 14});
+    for (std::size_t i = 0; i < 14; ++i)
+        edges.push_back({i, (i + 2) % 14});
 
     // 2. inner to middle connections at distance 3
     for (std::size_t i = 0; i < 14; ++i) {
@@ -27,6 +27,10 @@ Edges generate3C14Graph() {
     // 3. middle C14 cycle (Vertices 14..27)
     for (std::size_t i = 0; i < 14; ++i)
         edges.push_back({14 + i, 14 + ((i + 1) % 14)});
+
+    // 3b. middle chords at dist 2
+    for (std::size_t i = 0; i < 14; ++i)
+        edges.push_back({14 + i, 14 + ((i + 2) % 14)});
 
     // // 4. middle to outer connections at distance 3
     // for (std::size_t i = 0; i < 14; ++i) {
@@ -70,6 +74,10 @@ Edges genNonQuasi() {
     // 3. middle C14 cycle (Vertices 14..27)
     for (std::size_t i = 0; i < 14; ++i)
         edges.push_back({14 + i, 14 + ((i + 1) % 14)});
+
+    // 3b. middle chords at dist 2
+    for (std::size_t i = 0; i < 14; ++i)
+        edges.push_back({14 + i, 14 + ((i + 2) % 14)});
 
     // // 4. middle to outer connections at distance 3
     // for (std::size_t i = 0; i < 14; ++i) {
