@@ -24,50 +24,36 @@ std::vector<EdgeSetWithMissing> generate_edge_sets() {
     for (std::size_t u = 6; u < 12; ++u) for (std::size_t v = u + 1; v < 12; ++v)
         base_v2_edges.push_back({u, v});
 
-    // select 3 source vertices {a, b, c} from {0,1,2,3,4,5}
-    std::vector<int> mask = {0,0,0,1,1,1};
+    std::vector<std::pair<std::size_t, std::size_t>> v1_v2_matching;
+    for (std::size_t u = 0; u < 6; ++u) v1_v2_matching.push_back({u, 6 + u});
+
+    // select 3 non-neighbors from {0,1,2,3,4}
+    std::vector<int> mask = {0,0,1,1,1};
 
     do {
-        std::vector<std::size_t> abc;
-        for (std::size_t i = 0; i < 6; ++i)
-            if (mask[i]) abc.push_back(i);
+        EdgeSetWithMissing item;
 
-        // 3 target vertices in distinct from {a+6, b+6, c+6}
-        std::vector<std::size_t> R;
-        for (std::size_t v = 6; v < 12; ++v)
-            if (v != abc[0] + 6 && v != abc[1] + 6 && v != abc[2] + 6)
-                R.push_back(v);
+        // 1. Internal K_6 edges on V2
+        item.edges = base_v2_edges;
 
-        // permute R to iterate through all 3! pairings with {a, b, c}
-        do {
-            EdgeSetWithMissing item;
-            item.edges = base_v2_edges;
-
-            // Bipartite edges (V1 x V2)
-            for (std::size_t u = 0; u < 6; ++u) {
-                for (std::size_t v = 6; v < 12; ++v) {
-                    if (v == 6 + u) continue; // std. matching
-
-                    // skip the 3 removed cross-edges (a, R[0]), (b, R[1]), (c, R[2])
-                    if ((u == abc[0] && v == R[0]) ||
-                        (u == abc[1] && v == R[1]) ||
-                        (u == abc[2] && v == R[2])) {
-                        continue;
-                    }
-                    item.edges.push_back({u, v});
-                }
+        // 2. Bipartite edges (V1 x V2) excluding matching
+        for (std::size_t u = 0; u < 6; ++u) {
+            for (std::size_t v = 6; v < 12; ++v) {
+                if (v == u + 6) continue; // skip matching edge
+                item.edges.push_back({u, v});
             }
+        }
 
-            // Populate 9 missing edges (6 matching + 3 cross edges)
-            for (std::size_t u = 0; u < 6; ++u)
-                item.missing_edges.push_back({u, 6 + u});
-            item.missing_edges.push_back({abc[0], R[0]});
-            item.missing_edges.push_back({abc[1], R[1]});
-            item.missing_edges.push_back({abc[2], R[2]});
+        // Start missing_edges with the 6 bipartite matching edges
+        item.missing_edges = v1_v2_matching;
 
-            std::sort(item.edges.begin(), item.edges.end());
-            all_edge_sets.push_back(item);
-        } while (std::next_permutation(R.begin(), R.end()));
+        // 3. Connect vertex 5 to its 2 neighbors in V1; add 3 non-neighbors to missing_edges
+        for (std::size_t w = 0; w < 5; ++w) {
+            if (mask[w] == 1) item.missing_edges.push_back({w, 5});
+            else item.edges.push_back({w, 5});
+        }
+        std::sort(item.edges.begin(), item.edges.end());
+        all_edge_sets.push_back(item);
     } while (std::next_permutation(mask.begin(), mask.end()));
 
     return all_edge_sets;
@@ -102,11 +88,11 @@ int main() {
     std::size_t total_edge_sets = all_edge_sets.size();
     std::cout << "Generated " << total_edge_sets << " edge set configurations." << std::endl;
 
-    // Iterate through all 63 drawings of K_6
-    for (int i = 0; i < 63; i++) {
+    // Iterate through all drawings of K_5
+    for (int i = 0; i < 5; i++) {
         std::cout << "Drawing " << std::to_string(i) << std::endl;
 
-        std::ifstream input_file("../quasiDrawings/K6/jsons/" + std::to_string(i) + ".json");
+        std::ifstream input_file("../quasiDrawings/K5/jsons/" + std::to_string(i) + ".json");
         if (!input_file.is_open()) {
             std::cerr << "Could not open drawing file " << i << std::endl;
             continue;
