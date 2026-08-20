@@ -164,12 +164,31 @@ int main() {
     }
 
     auto start_edge = edges.begin() + 14;
+    const size_t total_edges = edges.size() - 14;
+    std::vector<int> path_choice(edges.size(), 0); 
+    size_t max_depth_reached = 0;
+    uint64_t total_iterations = 0;
 
     int counter = 0;
     for (auto e = start_edge;;) {
+        ++total_iterations;
+        size_t current_depth = std::distance(start_edge, e);
+
+        if (current_depth > max_depth_reached) {
+            max_depth_reached = current_depth;
+            std::cout << "\r[New Max Depth] " << max_depth_reached << "/" << total_edges << std::flush;
+        }
+
+        if (total_iterations % 100000 == 0) {
+            std::cout << "\rIter: " << total_iterations << " | Depth: " << current_depth << "/" << total_edges << " | Choices: [";
+            for (size_t i = 0; i <= current_depth; ++i) std::cout << path_choice[i] << " ";
+            std::cout << "]" << std::flush;
+        }
+
         std::size_t u = (*e)[0];
         std::size_t v = (*e)[1];
         HdsPath p = d.first_path(u, v);
+
         if (p.empty()) {
 BACKUP:
             // no way to add uv -> do previous edges differently
@@ -186,6 +205,12 @@ BACKUP:
                 p = d.edges.back().built;
                 d.remove_edge();
             } while (!d.next_path(p, v));
+
+            size_t backtracked_depth = std::distance(start_edge, e);
+            path_choice[backtracked_depth]++;
+        } else {
+            // reset choice count when entering a fresh edge branch
+            path_choice[current_depth] = 0;
         }
         d.add_edge(p, v);
 
