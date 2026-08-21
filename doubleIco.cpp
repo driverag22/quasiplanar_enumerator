@@ -10,7 +10,7 @@ typedef std::vector<Edge> Edges;
 
 const std::size_t n = 12;      // Total vertices
 const std::size_t klim = 17;   // 2n - 7 = 17
-const std::string split = "6";
+const std::string split = "8";
 
 struct EdgeSetWithMissing {
     Edges edges;
@@ -27,33 +27,36 @@ std::vector<EdgeSetWithMissing> generate_edge_sets() {
     std::vector<std::pair<std::size_t, std::size_t>> v1_v2_matching;
     for (std::size_t u = 0; u < 6; ++u) v1_v2_matching.push_back({u, 6 + u});
 
-    // select 3 non-neighbors from {0,1,2,3,4}
-    std::vector<int> mask = {0,0,1,1,1};
+    // select 2 non-neighbors from {0,1,2,3,4}
+    std::vector<int> mask = {0,0,0,1,1};
 
     do {
-        EdgeSetWithMissing item;
+        for (std::size_t t = 6; t < 11; ++t) {
+            EdgeSetWithMissing item;
 
-        // 1. Internal K_6 edges on V2
-        item.edges = base_v2_edges;
+            // 1. Internal K_6 edges on V2
+            item.edges = base_v2_edges;
 
-        // 2. Bipartite edges (V1 x V2) excluding matching
-        for (std::size_t u = 0; u < 6; ++u) {
-            for (std::size_t v = 6; v < 12; ++v) {
-                if (v == u + 6) continue; // skip matching edge
-                item.edges.push_back({u, v});
+            // 2. Bipartite edges (V1 x V2) excluding matching
+            for (std::size_t u = 0; u < 6; ++u) {
+                for (std::size_t v = 6; v < 12; ++v) {
+                    if (v == u + 6) continue; // skip matching edge
+                    if (u == 5 && v == t) continue; // Skip extra non-neighbor cross-edge
+                    item.edges.push_back({u, v});
+                }
             }
-        }
 
-        // Start missing_edges with the 6 bipartite matching edges
-        item.missing_edges = v1_v2_matching;
+            // Start missing_edges with the 6 bipartite matching edges
+            item.missing_edges = v1_v2_matching;
 
-        // 3. Connect vertex 5 to its 2 neighbors in V1; add 3 non-neighbors to missing_edges
-        for (std::size_t w = 0; w < 5; ++w) {
-            if (mask[w] == 1) item.missing_edges.push_back({w, 5});
-            else item.edges.push_back({w, 5});
+            // 3. Connect vertex 5 to its neighbors in V1; add non-neighbors to missing_edges
+            for (std::size_t w = 0; w < 5; ++w) {
+                if (mask[w] == 1) item.missing_edges.push_back({w, 5});
+                else item.edges.push_back({w, 5});
+            }
+            std::sort(item.edges.begin(), item.edges.end());
+            all_edge_sets.push_back(item);
         }
-        std::sort(item.edges.begin(), item.edges.end());
-        all_edge_sets.push_back(item);
     } while (std::next_permutation(mask.begin(), mask.end()));
 
     return all_edge_sets;
