@@ -10,7 +10,7 @@ typedef std::vector<Edge> Edges;
 
 const std::size_t n = 12;      // Total vertices
 const std::size_t klim = 17;   // 2n - 7 = 17
-const std::string split = "8";
+const std::string split = "9";
 
 struct EdgeSetWithMissing {
     Edges edges;
@@ -27,11 +27,12 @@ std::vector<EdgeSetWithMissing> generate_edge_sets() {
     std::vector<std::pair<std::size_t, std::size_t>> v1_v2_matching;
     for (std::size_t u = 0; u < 6; ++u) v1_v2_matching.push_back({u, 6 + u});
 
-    // select 2 non-neighbors from {0,1,2,3,4}
+    // select 2 non-neighbors from {6,7,8,9,10}
     std::vector<int> mask = {0,0,0,1,1};
 
     do {
-        for (std::size_t t = 6; t < 11; ++t) {
+        // select 1 non-neighbor from {0,1,2,3,4}
+        for (std::size_t t = 0; t < 5; ++t) {
             EdgeSetWithMissing item;
 
             // 1. Internal K_6 edges on V2
@@ -41,7 +42,7 @@ std::vector<EdgeSetWithMissing> generate_edge_sets() {
             for (std::size_t u = 0; u < 6; ++u) {
                 for (std::size_t v = 6; v < 12; ++v) {
                     if (v == u + 6) continue; // skip matching edge
-                    if (u == 5 && v == t) continue; // Skip extra non-neighbor cross-edge
+                    if (u == 5 && mask[v]) continue;
                     item.edges.push_back({u, v});
                 }
             }
@@ -50,10 +51,10 @@ std::vector<EdgeSetWithMissing> generate_edge_sets() {
             item.missing_edges = v1_v2_matching;
 
             // 3. Connect vertex 5 to its neighbors in V1; add non-neighbors to missing_edges
-            for (std::size_t w = 0; w < 5; ++w) {
-                if (mask[w] == 1) item.missing_edges.push_back({w, 5});
-                else item.edges.push_back({w, 5});
-            }
+            item.missing_edges.push_back({t, 5});
+            for (std::size_t w = 0; w < 5; ++w) 
+                if (w != t) item.edges.push_back({w, 5});
+
             std::sort(item.edges.begin(), item.edges.end());
             all_edge_sets.push_back(item);
         }
