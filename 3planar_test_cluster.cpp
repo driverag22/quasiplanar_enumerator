@@ -90,7 +90,7 @@ const auto log_interval = std::chrono::seconds(60);
             last_log_time = now;
             auto elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - start_time).count();
             uint64_t speed = static_cast<uint64_t>(step_counter / (elapsed > 0 ? elapsed : 1));
-            std::cout << "\n============================== SEARCH PROGRESS (t = " << elapsed << "s) ==============================\n";
+            std::cout << "\n============================== SPLIT 1, SEARCH PROGRESS (t = " << elapsed << "s) ==============================\n";
             std::cout << "Steps: " << (step_counter / 1000000) << "M | Speed: " << speed << " st/s"
                 << " | Time: " << static_cast<uint64_t>(elapsed) << " s"
                 << " | Current Edge: " << e_idx << "/" << edges.size() - 1
@@ -160,20 +160,20 @@ END:
     std::cout << "Found " << solutions.size() << " drawings in total." << std::endl;
     if(solutions.size() == 0) return 0;
 
-//     std::size_t idx = 0;
-//     for (auto it = solutions.begin();it!=solutions.end();it++) {
-//         std::string filename = "../quasiDrawings/K8_3planar/" + std::to_string(idx) + "_quasi.json";
-//         std::ofstream of_json(filename);
-//         nlohmann::ordered_json output_json = (*it).serialize_to_json();
-//         of_json << output_json.dump(4);
-//         of_json.close();
-
-//         std::string filename2 = "../quasiDrawings/K8_3planar/" + std::to_string(idx) + "_quasi.graphml";
-//         std::ofstream of_graphml(filename2);
-//         (*it).graphml_output(of_graphml);
-//         of_graphml.close();
-//         idx++;
-//     }
+    std::size_t idx = 0;
+    for (auto it = solutions.begin();it!=solutions.end();it++) {
+        std::string filename = "../quasiDrawings/3planar_test/split1/" + std::to_string(idx) + "_quasi.json";
+        std::ofstream of_json(filename);
+        nlohmann::ordered_json output_json = (*it).serialize_to_json();
+        of_json << output_json.dump(4);
+        of_json.close();
+    
+        std::string filename2 = "../quasiDrawings/3planar_test/split1/" + std::to_string(idx) + "_quasi.graphml";
+        std::ofstream of_graphml(filename2);
+        (*it).graphml_output(of_graphml);
+        of_graphml.close();
+        idx++;
+    }
 
     std::cout << "Found " << counter << " drawings in total." << std::endl;
     std::cout << "Found " << solutions.size() << " unique drawings in total." << std::endl;
