@@ -89,11 +89,11 @@ int main() {
 
 
             if (e_idx > max_depth) max_depth = e_idx;
-            // Periodic progress report (every 1K steps)
+            // Periodic progress report (every 10K steps)
             if (++step_counter % 10000 == 0) {
                 auto elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - start_time).count();
                 std::cout << "\033[2J\033[1;1H";
-                std::cout << "================== SEARCH PROGRESS ==================\n";
+                std::cout << "================== SPLIT 2 | SEARCH PROGRESS ==================\n";
                 std::cout 
                     << " | Drawing: " << i 
                     << " | Steps: " << (step_counter / 1000) << "K"
@@ -158,6 +158,7 @@ BACKUP:
             }
         }
 END:
+        std::cout << "NEXT DRAWING\n\n\n";
     }
     // std::cout << "\n\n=== Edge Bottleneck Analysis ===\n";
     // for (std::size_t i = num_fixed_edges; i < edges.size(); ++i) {
@@ -170,13 +171,13 @@ END:
 
     std::size_t idx = 0;
     for (auto it = solutions.begin();it!=solutions.end();it++) {
-        std::string filename = "../quasiDrawings/3planar_test/quad_triangle/" + std::to_string(idx) + "_quasi.json";
+        std::string filename = "../quasiDrawings/3planar_test/split2/" + std::to_string(idx) + "_quasi.json";
         std::ofstream of_json(filename);
         nlohmann::ordered_json output_json = (*it).serialize_to_json();
         of_json << output_json.dump(4);
         of_json.close();
 
-        std::string filename2 = "../quasiDrawings/3planar_test/quad_triangle/" + std::to_string(idx) + "_quasi.graphml";
+        std::string filename2 = "../quasiDrawings/3planar_test/split2/" + std::to_string(idx) + "_quasi.graphml";
         std::ofstream of_graphml(filename2);
         (*it).graphml_output(of_graphml);
         of_graphml.close();
