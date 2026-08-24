@@ -93,7 +93,7 @@ int main() {
             if (++step_counter % 10000 == 0) {
                 auto elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - start_time).count();
                 std::cout << "\033[2J\033[1;1H";
-                std::cout << "================== SEARCH PROGRESS ==================\n";
+                std::cout << "================== SPLIT 2 SEARCH PROGRESS ==================\n";
                 std::cout 
                     << " | Drawing: " << i 
                     << " | Steps: " << (step_counter / 1000) << "K"
@@ -170,13 +170,13 @@ END:
 
     std::size_t idx = 0;
     for (auto it = solutions.begin();it!=solutions.end();it++) {
-        std::string filename = "../quasiDrawings/3planar_test/quad_triangle/" + std::to_string(idx) + "_quasi.json";
+        std::string filename = "../quasiDrawings/3planar_test/split2/" + std::to_string(idx) + "_quasi.json";
         std::ofstream of_json(filename);
         nlohmann::ordered_json output_json = (*it).serialize_to_json();
         of_json << output_json.dump(4);
         of_json.close();
 
-        std::string filename2 = "../quasiDrawings/3planar_test/quad_triangle/" + std::to_string(idx) + "_quasi.graphml";
+        std::string filename2 = "../quasiDrawings/3planar_test/split2/" + std::to_string(idx) + "_quasi.graphml";
         std::ofstream of_graphml(filename2);
         (*it).graphml_output(of_graphml);
         of_graphml.close();
