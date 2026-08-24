@@ -1,36 +1,50 @@
-// #include "hds_kplanar.h"
-#include "hds_quasiplanar.h"
+#include "hds_kplanar.h"
+// #include "hds_quasiplanar.h"
 #include "iso.h"
 //#include <sstream>
 #include <fstream>
+#include <chrono>
+#include <iomanip>
 
 typedef std::vector<std::size_t> Edge;
 typedef std::vector<Edge> Edges;
 
-Edges generateCompleteGraph(std::size_t n) {
-    Edges edges;
-    edges.reserve(n * (n - 1) / 2);
-    for (std::size_t i = 0; i < n; ++i) {
-        for (std::size_t j = i + 1; j < n; ++j) {
-            edges.push_back({i, j});
-        }
-    }
-    return edges;
-}
+// Edges generateCompleteGraph(std::size_t n) {
+//     Edges edges;
+//     edges.reserve(n * (n - 1) / 2);
+//     for (std::size_t i = 0; i < n; ++i) {
+//         for (std::size_t j = i + 1; j < n; ++j) {
+//             edges.push_back({i, j});
+//         }
+//     }
+//     return edges;
+// }
 
-const std::size_t n = 8;
+const Edges edges = {
+    {0,1},{0,2},{0,3},{0,4},{0,5},{0,6},{0,7},{0,8},{0,9},{0,10},{0,11},
+    {1,2},{1,3},{1,4},{1,5},{1,6},{1,7},{1,8},{1,9},{1,10},{1,11},
+    {2,3},{2,4},{2,7},
+    {3,4},{3,5},{3,8},
+    {4,5},{4,11},
+    {5,6},{5,10},
+    {6,9},{6,11},
+    {7,8},{7,9},
+    {8,9},{8,10},
+    {9,10},
+    {10,11},
+};
+
+const std::size_t n = 12;
 const std::size_t klim = 3;
 
 int main() {
-    std::cout << "\n\n ===================================================== \n";
-    std::cout << "k = " << klim << ", n = " << n << std::endl;
-    const Edges edges = generateCompleteGraph(n);
+    // const Edges edges = generateCompleteGraph(n);
     std::vector< Drawing<klim> > solutions;
     std::vector<std::size_t> d_cnt(10000,0); // assume no more than 10000 unique drawings up to iso
 
     Drawing<klim> d(n);
     d.add_first_edge(edges[0][0], edges[0][1]);
-    std::size_t num_fixed_edges = n;
+    std::size_t num_fixed_edges = 11;
     for (std::size_t i = 2; i < num_fixed_edges; ++i) {
         HdsPath p = d.first_path(0, i);
         if (p.empty()) {
@@ -40,16 +54,52 @@ int main() {
     }
     std::cout << "Star built" << std::endl;
 
-    auto start_edge = edges.begin() + (num_fixed_edges-1);
+    auto start_edge = edges.begin() + num_fixed_edges;
     // auto start_edge = edges.begin() + 1;
 
     int counter = 0;
+    std::vector<uint64_t> fail_counts(edges.size(), 0);
+    std::size_t max_depth = 0;
+    uint64_t step_counter = 0;
+    uint64_t total_fails = 0;
+    auto start_time = std::chrono::steady_clock::now();
+
     for (auto e = start_edge;;) {
+        std::size_t e_idx = std::distance(edges.begin(), e);
         std::size_t u = (*e)[0];
         std::size_t v = (*e)[1];
+
+        // Periodic progress report (every 1M steps)
+        if (++step_counter % 1000000 == 0) {
+            auto elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - start_time).count();
+            std::cout << "\033[2J\033[1;1H";
+            std::cout << "================== SEARCH PROGRESS ==================\n";
+            std::cout << "Steps: " << (step_counter / 1000000) << "M"
+                << " | Time: " << static_cast<uint64_t>(elapsed) << " s"
+                << " | Speed: " << static_cast<uint64_t>(step_counter / elapsed) << " st/s"
+                << " | Current Depth: " << e_idx << "/" << edges.size() - 1
+                << " | Max Depth: " << max_depth
+                << " | Solutions: " << solutions.size()
+                << " | Total fails: " << total_fails
+                << " | (n,k): (" << n << "," << klim << ")\n";
+            std::cout << "-----------------------------------------------------\n";
+            std::cout << "Edge Failures Breakdown:\n";
+
+            // Print failure grid (4 edges per line)
+            int cols = 0;
+            for (std::size_t i = num_fixed_edges; i < edges.size(); ++i) {
+                std::cout << "E" << std::setw(2) << i << "(" << edges[i][0] << "->" << edges[i][1] << "): " 
+                    << std::setw(8) << fail_counts[i] << "  ";
+                if (++cols % 4 == 0) std::cout << "\n";
+            }
+            std::cout << "\n" << std::flush;
+        }
+
         HdsPath p = d.first_path(u, v);
         if (p.empty()) {
 BACKUP:
+            fail_counts[std::distance(edges.begin(), e)]++; // Count edge failure
+            total_fails++;
             // no way to add uv -> do previous edges differently
             do {
                 if (e == start_edge) {
@@ -86,6 +136,12 @@ BACKUP:
         }
     }
 END:
+    std::cout << "\n\n=== Edge Bottleneck Analysis ===\n";
+    for (std::size_t i = num_fixed_edges; i < edges.size(); ++i) {
+        std::cout << "Edge " << std::setw(2) << i << " (" << edges[i][0] << "->" << edges[i][1] << "): " 
+            << fail_counts[i] << " failures/backtracks\n";
+    }
+
     std::cout << "Found " << solutions.size() << " min crossing drawings in total." << std::endl;
     if(solutions.size() == 0) {
         return 0;
