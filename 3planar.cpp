@@ -6,11 +6,19 @@
 typedef std::vector<std::size_t> Edge;
 typedef std::vector<Edge> Edges;
 
-// const Edges edges = {
-//     {0,8},{1,8},{2,8},{3,8},{4,8},
-// };
+const Edges edges = {
+    {8,9},
+    {9,10},{9,11},{9,12},{9,13},{9,14},
+    {10,11},{10,12},{10,13},{10,14},{10,15},{10,16},{10,17},
+    {11,12},{11,13},{11,14},{11,15},{11,16},{11,17},
+    {12,13},{12,14},{12,15},{12,16},{12,17},
+    {13,14},{13,15},{13,16},{13,17},
+    {14,15},{14,16},{14,17},
+    {15,16},{15,17},
+    {16,17},
+};
 
-const std::size_t n = 9;
+const std::size_t n = 18;
 const std::size_t klim = 3;
 
 int main() {
@@ -18,21 +26,19 @@ int main() {
     std::vector<std::bitset<3>> solution_sources;
     std::vector<std::size_t> d_cnt(10000,0); // assume no more than 10000 unique drawings up to iso
 
-    std::vector<int> mask = {0,0,0,1,1,1,1,1};
-    int i = 0;
-    do {
-        std::cout << "\n\n PERMUTATION: " << i++ << "\n";
-        for (int i = 0; i < 3; i++) {
+    // std::vector<int> mask = {0,0,0,1,1,1,1,1};
+    // int i = 0;
+    // do {
+    //     std::cout << "\n\n PERMUTATION: " << i++ << "\n";
+        for (int i = 0; i < 5; i++) {
             std::cout << "Drawing " << std::to_string(i) << std::endl;
 
-            std::ifstream input_file("../quasiDrawings/K8_3planar/" + std::to_string(i) + ".json");
+            std::ifstream input_file("../quasiDrawings/K8_3planar/extension_deg5_vertex/" + std::to_string(i) + ".json");
             nlohmann::json import_data; input_file >> import_data; input_file.close();
             // loading drawing
             Drawing<klim> d(import_data, n);
-
-            Edges edges;
-            for (std::size_t j = 0; j < 8; j++) 
-                if (mask[j]) edges.push_back({j,8});
+            // for (std::size_t j = 0; j < 8; j++) 
+            //     if (mask[j]) edges.push_back({j,8});
 
             auto start_edge = edges.begin();
 
@@ -85,20 +91,20 @@ BACKUP:
 END:
             std::cout << "NEXT DRAWING\n\n\n";
         }
-    } while (std::next_permutation(mask.begin(), mask.end()));
+    // } while (std::next_permutation(mask.begin(), mask.end()));
 
     std::cout << "Found " << solutions.size() << " drawings in total." << std::endl;
     if(solutions.size() == 0) return 0;
 
     std::size_t idx = 0;
     for (auto it = solutions.begin();it!=solutions.end();it++) {
-        std::string filename = "../quasiDrawings/K8_3planar/extension_deg5_vertex/" + std::to_string(idx) + ".json";
+        std::string filename = "../quasiDrawings/K8_3planar/extension_deg5_vertex/double/" + std::to_string(idx) + ".json";
         std::ofstream of_json(filename);
         nlohmann::ordered_json output_json = (*it).serialize_to_json();
         of_json << output_json.dump(4);
         of_json.close();
 
-        std::string filename2 = "../quasiDrawings/K8_3planar/extension_deg5_vertex/" + std::to_string(idx) + ".graphml";
+        std::string filename2 = "../quasiDrawings/K8_3planar/extension_deg5_vertex/double/" + std::to_string(idx) + ".graphml";
         std::ofstream of_graphml(filename2);
         (*it).graphml_output(of_graphml);
         of_graphml.close();
