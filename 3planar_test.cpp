@@ -44,10 +44,13 @@ const Edges edges = {
     {1,6},{1,8},
     {2,7},{2,9},
     {3,4},{3,10},
+
+    {4,11},{5,8},{6,9},{7,10},
 };
 
 const std::size_t n = 12;
 const std::size_t klim = 3;
+const std::string split = "2b";
 
 int main() {
     // const Edges edges = generateCompleteGraph(n);
@@ -93,7 +96,7 @@ int main() {
             if (++step_counter % 10000 == 0) {
                 auto elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - start_time).count();
                 std::cout << "\033[2J\033[1;1H";
-                std::cout << "================== SPLIT 2 | SEARCH PROGRESS ==================\n";
+                std::cout << "================== SPLIT " << split << " | SEARCH PROGRESS ==================\n";
                 std::cout 
                     << " | Drawing: " << i 
                     << " | Steps: " << (step_counter / 1000) << "K"

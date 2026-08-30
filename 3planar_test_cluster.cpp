@@ -30,10 +30,11 @@ const Edges edges = {
 
     {2,4},{3,5},{7,9},{8,10},
 
-    {3,8},{5,10},
-    {4,11},
+    {3,8},{3,6},
+    {4,6},{4,11},
+    {5,10},
     {6,9},
-    // {6,11},
+    {6,11},
 
     // {2,3},{2,4},{2,7},
     // {3,4},{3,5},{3,8},
@@ -48,6 +49,7 @@ const Edges edges = {
 
 const std::size_t n = 12;
 const std::size_t klim = 3;
+const std::string split = "1d";
 
 int main() {
     // const Edges edges = generateCompleteGraph(n);
@@ -85,18 +87,20 @@ const auto log_interval = std::chrono::seconds(60);
         auto now = std::chrono::steady_clock::now();
         step_counter++;
 
+        if (e_idx > max_depth) max_depth = e_idx;
+
         // Periodic progress report (every 1M steps)
         if (now - last_log_time >= log_interval) {
             last_log_time = now;
             auto elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - start_time).count();
             uint64_t speed = static_cast<uint64_t>(step_counter / (elapsed > 0 ? elapsed : 1));
-            std::cout << "\n============================== SPLIT 1, SEARCH PROGRESS (t = " << elapsed << "s) ==============================\n";
+            std::cout << "\n============================== SPLIT " << split << ", SEARCH PROGRESS (t = " << elapsed << "s) ==============================\n";
             std::cout << "Steps: " << (step_counter / 1000000) << "M | Speed: " << speed << " st/s"
                 << " | Time: " << static_cast<uint64_t>(elapsed) << " s"
                 << " | Current Edge: " << e_idx << "/" << edges.size() - 1
                 << " | Max Depth: " << max_depth
                 << " | Sols: " << solutions.size()
-                << " | (n,k): (" << n << "," << klim << ")\n";
+                << " | (n,k,|E|): (" << n << "," << klim << "," << edges.size() << ")\n";
             std::cout << "-----------------------------------------------------------------------------------------\n";
             std::cout << "Edge Failures Breakdown:\n";
 
