@@ -7,11 +7,11 @@ typedef std::vector<Edge> Edges;
 
 const Edges edges = {
     // base K6
-    {0,1},{0,2},{0,3},{0,4},{0,5},
-    {1,2},{1,3},{1,4},{1,5},
-    {2,3},{2,4},{2,5},
-    {3,4},{3,5},
-    {4,5},
+    // {0,1},{0,2},{0,3},{0,4},{0,5},
+    // {1,2},{1,3},{1,4},{1,5},
+    // {2,3},{2,4},{2,5},
+    // {3,4},{3,5},
+    // {4,5},
 
     // connection to outer 6-vertex-graph
     {0,6},{0,7},{0,11},
@@ -63,80 +63,68 @@ bool is_drawing_extendable(const Drawing<klim>& d, std::size_t num_vertices) {
 
 int main() {
     std::vector< Drawing<klim> > solutions;
-    std::cout << edges.size() << "\n";
     std::vector<std::size_t> d_cnt(10000,0); // assume no more than 10000 unique drawings up to iso
 
-    // for (std::size_t drawing_id = 0; drawing_id < 5; ++drawing_id) {
-    // Now know that it can only use drawing 0!
-    // std::ifstream input_file("../quasiDrawings/K5_3planar/" + std::to_string(drawing_id) + ".json");
-    // nlohmann::json import_data; input_file >> import_data; input_file.close();
-    // loading drawing
-    // Drawing<klim> d(import_data, n);
-    Drawing<klim> d(n);
-    d.add_first_edge(edges[0][0], edges[0][1]);
-    std::size_t num_fixed_edges = 5;
-    for (std::size_t i = 2; i <= num_fixed_edges; ++i) {
-        HdsPath p = d.first_path(0, i);
-        if (p.empty()) {
-            throw std::runtime_error("Failed to build the initial star!");
-        }
-        d.add_edge(p, i);
-    }
-    std::cout << "Star built" << std::endl;
+    for (std::size_t drawing_id = 0; drawing_id < 39; ++drawing_id) {
+        // Now know that it can only use drawing 0!
+        std::ifstream input_file("../quasiDrawings/K6_3planar/" + std::to_string(drawing_id) + ".json");
+        nlohmann::json import_data; input_file >> import_data; input_file.close();
+        // loading drawing
+        Drawing<klim> d(import_data, n);
+        std::cout << "Loaded drawing " << drawing_id << std::endl;
 
-    auto start_edge = edges.begin() + num_fixed_edges;
+        auto start_edge = edges.begin();
+        std::size_t counter = 0;
 
-    std::size_t counter = 0;
-    for (auto e = start_edge;;) {
-        std::size_t u = (*e)[0];
-        std::size_t v = (*e)[1];
+        for (auto e = start_edge;;) {
+            std::size_t u = (*e)[0];
+            std::size_t v = (*e)[1];
 
-        HdsPath p = d.first_path(u, v);
-        if (p.empty()) {
+            HdsPath p = d.first_path(u, v);
+            if (p.empty()) {
 BACKUP:
-            // no way to add uv -> do previous edges differently
-            do {
-                if (e == start_edge) {
-                    goto END;
-                }
-                --e;
+                // no way to add uv -> do previous edges differently
+                do {
+                    if (e == start_edge) {
+                        goto END;
+                    }
+                    --e;
 
-                u = (*e)[0];
-                assert(u == d.edges.back().u);
-                v = (*e)[1];
-                assert(v == d.edges.back().v);
-                p = d.edges.back().built;
-                d.remove_edge();
-            } while (!d.next_path(p, v));
-        }
-        d.add_edge(p, v);
+                    u = (*e)[0];
+                    assert(u == d.edges.back().u);
+                    v = (*e)[1];
+                    assert(v == d.edges.back().v);
+                    p = d.edges.back().built;
+                    d.remove_edge();
+                } while (!d.next_path(p, v));
+            }
+            d.add_edge(p, v);
 
-        if (++e == edges.end()) {
-            bool newSol = true;
-            std::size_t d_ind = 0;
-            for (auto it = solutions.begin(); it != solutions.end(); it++) {
-                if(are_isomorphic((*it),d)) {
-                    newSol = false;
-                    d_cnt[d_ind]++;
-                    break;
+            if (++e == edges.end()) {
+                bool newSol = true;
+                std::size_t d_ind = 0;
+                for (auto it = solutions.begin(); it != solutions.end(); it++) {
+                    if(are_isomorphic((*it),d)) {
+                        newSol = false;
+                        d_cnt[d_ind]++;
+                        break;
+                    }
+                    d_ind++;
                 }
-                d_ind++;
+                if (newSol) {
+                    solutions.push_back(d);
+                    d_cnt[d_ind] = 1;
+                    std::cout << "Solution found: " << counter++ << "\n\n";
+                    if (is_drawing_extendable(d,n)) {
+                        std::cout << "Extendable drawing!!!: " << d_ind << std::endl;
+                    }
+                }
+                goto BACKUP;
             }
-            if (newSol) {
-                solutions.push_back(d);
-                d_cnt[d_ind] = 1;
-                std::cout << "Solution found: " << counter++ << "\n\n";
-                // if (is_drawing_extendable(d,n)) {
-                //     std::cout << "EXTENDABLE DRAWING" << std::endl;
-                //     return 0;
-                // }
-            }
-            goto BACKUP;
         }
-    }
 END:
-        // std::cout << "\n DRAWING: " << drawing_id++ << " DONE\n\n";
-    // }
+        std::cout << "\n Drawing " << drawing_id++ << " done\n\n";
+    }
     std::cout << "Found " << solutions.size() << " drawings in total." << std::endl;
     if(solutions.size() == 0) return 0;
 
