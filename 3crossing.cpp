@@ -74,7 +74,7 @@ int main() {
     // Drawing<klim> d(import_data, n);
     Drawing<klim> d(n);
     d.add_first_edge(edges[0][0], edges[0][1]);
-    std::size_t num_fixed_edges = n-1;
+    std::size_t num_fixed_edges = 5;
     for (std::size_t i = 2; i <= num_fixed_edges; ++i) {
         HdsPath p = d.first_path(0, i);
         if (p.empty()) {
