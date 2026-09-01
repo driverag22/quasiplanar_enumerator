@@ -10,7 +10,7 @@ typedef std::vector<Edge> Edges;
 
 const std::size_t n = 12;      // Total vertices
 const std::size_t klim = 17;   // 2n - 7 = 17
-const std::string split = "A";
+const std::string split = "B";
 
 struct EdgeSetWithMissing {
     Edges edges;
@@ -28,23 +28,26 @@ std::vector<EdgeSetWithMissing> generate_edge_sets() {
     for (std::size_t u = 0; u < 6; ++u) v1_v2_matching.push_back({u, 6 + u});
 
     for (std::size_t l = 0; l < 6; ++l) {
+    for (std::size_t r = l+1; r < 6; ++r) {
         for (std::size_t a = 6; a < 12; ++a) {
-            if (a == l+6) continue;
+            if (a == l+6 || a == r+6) continue;
             for (std::size_t b = a+1; b < 12; ++b) {
-                if (b == l+6) continue;
+                if (b == l+6 || b == r+6) continue;
                 EdgeSetWithMissing item;
                 item.edges = base_v2_edges;
                 for (std::size_t u = 0; u < 6; ++u) {
                     for (std::size_t v = 6; v < 12; ++v) {
                         if (v == u + 6) continue;
-                        if (u == l && (v == a || v == b))
+                        if (u == l && v == a)
+                            continue;
+                        if (u == r && v == b)
                             continue;
                         item.edges.push_back({u, v});
                     }
                 }
                 item.missing_edges = v1_v2_matching;
                 item.missing_edges.push_back({l,a});
-                item.missing_edges.push_back({l,b});
+                item.missing_edges.push_back({r,b});
 
                 std::sort(item.edges.begin(), item.edges.end());
                 all_edge_sets.push_back(item);
