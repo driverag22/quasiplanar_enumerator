@@ -118,7 +118,7 @@ BACKUP:
                 }
                 d.add_edge(p, v);
 
-                if (++e == edges.end()) {
+                if (++e == current_edges.end()) {
                     bool newSol = true;
                     std::size_t d_ind = 0;
                     for (auto it = solutions.begin(); it != solutions.end(); it++) {
