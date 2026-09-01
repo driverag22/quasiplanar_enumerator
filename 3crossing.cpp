@@ -5,48 +5,24 @@
 typedef std::vector<std::size_t> Edge;
 typedef std::vector<Edge> Edges;
 
-const Edges edges = {
-    // base K6
-    // {0,1},{0,2},{0,3},{0,4},{0,5},
-    // {1,2},{1,3},{1,4},{1,5},
-    // {2,3},{2,4},{2,5},
-    // {3,4},{3,5},
-    // {4,5},
-
-    // connection to outer 6-vertex-graph
-    {0,6},{0,7},{0,11},
-    {1,6},{1,7},{1,8},
-    {2,7},{2,8},{2,9},
-    {3,8},{3,9},{3,10},
-    {4,9},{4,10},{4,11},
-    {5,6},{5,10},{5,11},
-
-    // outer 6-vertex-graph
-    {6,7},{6,8},{6,10},{6,11},
-    {7,8},{7,9},{7,11},
-    {8,9},{8,10},
-    {9,10},{9,11},
-    {10,11},
-};
-
 const std::size_t n = 12;
 const std::size_t klim = 3;
 
 const Edges outer_v2_edges = {
-    {6,7},{6,8},{6,10},{6,11},
-    {7,8},{7,9},{7,11},
+    {6,7},{6,8},{6,9},{6,10},{6,11},
+    {7,8},{7,9},{7,10},{7,11},
     {8,9},{8,10},
     {9,10},{9,11},
     {10,11}
 };
 
 const std::vector<std::vector<std::size_t>> v1_targets_template = {
-    {6, 7, 11}, // Slot 0 connections
-    {6, 7, 8},  // Slot 1 connections
-    {7, 8, 9},  // Slot 2 connections
-    {8, 9, 10}, // Slot 3 connections
-    {9, 10, 11},// Slot 4 connections
-    {6, 10, 11} // Slot 5 connections
+    {6,7,11}, // Slot 0 connections
+    {6,7,8,9,11},  // Slot 1 connections
+    {7,8,9},  // Slot 2 connections
+    {8,9,10}, // Slot 3 connections
+    {9,10,11},// Slot 4 connections
+    {6,10,11} // Slot 5 connections
 };
 
 std::vector<Edges> generate_all_edge_sets() {
@@ -110,9 +86,8 @@ int main() {
         Drawing<klim> base_d(import_data, n);
         std::cout << "Loaded drawing " << drawing_id << std::endl;
 
-        std::size_t perm_idx = -1;
+        std::size_t perm_idx = 0;
         for (const auto& current_edges : all_edge_sets) {
-            perm_idx++;
             std::cout << "\rDrawing " << drawing_id << " | Permutation [" << perm_idx << " / " << total_edge_sets << "]" << std::flush;
             Drawing<klim> d = base_d;
 
@@ -166,6 +141,7 @@ BACKUP:
                 }
             }
 NEXT_PERM:
+            perm_idx++;
         }
         std::cout << "\n Drawing " << drawing_id++ << " done\n\n";
     }
