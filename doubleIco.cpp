@@ -10,7 +10,7 @@ typedef std::vector<Edge> Edges;
 
 const std::size_t n = 12;      // Total vertices
 const std::size_t klim = 17;   // 2n - 7 = 17
-const std::string split = "11";
+const std::string split = "A";
 
 struct EdgeSetWithMissing {
     Edges edges;
@@ -27,40 +27,30 @@ std::vector<EdgeSetWithMissing> generate_edge_sets() {
     std::vector<std::pair<std::size_t, std::size_t>> v1_v2_matching;
     for (std::size_t u = 0; u < 6; ++u) v1_v2_matching.push_back({u, 6 + u});
 
-    for (std::size_t a = 0; a < 5; ++a) {
-        std::vector<std::size_t> v2_rem;
-        for (std::size_t v = 6; v < 12; ++v) if (v != a + 6) v2_rem.push_back(v);
-
-        std::vector<int> mask = {0, 0, 0, 1, 1};
-        do {
-            std::vector<std::size_t> non_neighs_a;
-            for (std::size_t i = 0; i < 5; ++i)
-                if (mask[i]) non_neighs_a.push_back(v2_rem[i]);
-
-            EdgeSetWithMissing item;
-            item.edges = base_v2_edges;
-
-            for (std::size_t w = 0; w < 5; ++w)
-                if (w != a) item.edges.push_back({w, 5});
-
-            for (std::size_t u = 0; u < 6; ++u) {
-                for (std::size_t v = 6; v < 12; ++v) {
-                    if (v == u + 6) continue;
-                    if (u == a && (v == non_neighs_a[0] || v == non_neighs_a[1]))
-                        continue;
-                    item.edges.push_back({u, v});
+    for (std::size_t l = 0; l < 6; ++l) {
+        for (std::size_t a = 6; a < 12; ++a) {
+            if (a == l+6) continue;
+            for (std::size_t b = a+1; b < 12; ++b) {
+                if (b == l+6) continue;
+                EdgeSetWithMissing item;
+                item.edges = base_v2_edges;
+                for (std::size_t u = 0; u < 6; ++u) {
+                    for (std::size_t v = 6; v < 12; ++v) {
+                        if (v == u + 6) continue;
+                        if (u == l && (v == a || v == b))
+                            continue;
+                        item.edges.push_back({u, v});
+                    }
                 }
+                item.missing_edges = v1_v2_matching;
+                item.missing_edges.push_back({l,a});
+                item.missing_edges.push_back({l,b});
+
+                std::sort(item.edges.begin(), item.edges.end());
+                all_edge_sets.push_back(item);
+
             }
-
-            item.missing_edges = v1_v2_matching;
-            item.missing_edges.push_back({a, 5});
-            item.missing_edges.push_back({a, non_neighs_a[0]});
-            item.missing_edges.push_back({a, non_neighs_a[1]});
-
-            std::sort(item.edges.begin(), item.edges.end());
-            all_edge_sets.push_back(item);
-
-        } while (std::next_permutation(mask.begin(), mask.end()));
+        }
     }
     return all_edge_sets;
 }
@@ -95,10 +85,10 @@ int main() {
     std::cout << "Generated " << total_edge_sets << " edge set configurations." << std::endl;
 
     // Iterate through all drawings of K_5
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 63; i++) {
         std::cout << "Drawing " << std::to_string(i) << std::endl;
 
-        std::ifstream input_file("../quasiDrawings/K5/jsons/" + std::to_string(i) + ".json");
+        std::ifstream input_file("../quasiDrawings/K6/jsons/" + std::to_string(i) + ".json");
         if (!input_file.is_open()) {
             std::cerr << "Could not open drawing file " << i << std::endl;
             continue;
