@@ -10,7 +10,7 @@ typedef std::vector<Edge> Edges;
 
 const std::size_t n = 12;      // Total vertices
 const std::size_t klim = 17;   // 2n - 7 = 17
-const std::string split = "D";
+const std::string split = "E";
 
 struct EdgeSetWithMissing {
     Edges edges;
@@ -20,35 +20,30 @@ struct EdgeSetWithMissing {
 std::vector<EdgeSetWithMissing> generate_edge_sets() {
     std::vector<EdgeSetWithMissing> all_edge_sets;
 
+    Edges base_v2_edges;
+    for (std::size_t u = 6; u < 12; ++u) for (std::size_t v = u + 1; v < 12; ++v)
+        base_v2_edges.push_back({u, v});
+
     std::vector<std::pair<std::size_t, std::size_t>> v1_v2_matching;
     for (std::size_t u = 0; u < 6; ++u) v1_v2_matching.push_back({u, 6 + u});
 
-    for (std::size_t a = 0; a < 6; ++a) {
-        for (std::size_t b = 6; b < 12; ++b) {
-            if (b == a+6) continue;
-
+    for (std::size_t l = 0; l < 6; ++l) {
+        for (std::size_t r = l+1; r < 6; ++r) {
             EdgeSetWithMissing item;
-
-            item.missing_edges = v1_v2_matching;
-            item.missing_edges.push_back({a, b});
-            std::size_t v2_u = std::min(b, a + 6);
-            std::size_t v2_v = std::max(b, a + 6);
-            item.missing_edges.push_back({v2_u, v2_v});
-
-            for (std::size_t u = 6; u < 12; ++u) {
-                for (std::size_t v = u + 1; v < 12; ++v) {
-                    if (u == v2_u && v == v2_v) continue; // Skip (b, a+6)
-                    item.edges.push_back({u, v});
-                }
-            }
-
+            item.edges = base_v2_edges;
             for (std::size_t u = 0; u < 6; ++u) {
                 for (std::size_t v = 6; v < 12; ++v) {
-                    if (v == u + 6) continue;     // Skip perfect matching
-                    if (u == a && v == b) continue; // Skip (a, b)
+                    if (v == u + 6) continue;
+                    if (u == r && v == (l+6))
+                        continue;
+                    if (u == l && v == (r+6))
+                        continue;
                     item.edges.push_back({u, v});
                 }
             }
+            item.missing_edges = v1_v2_matching;
+            item.missing_edges.push_back({l,r+6});
+            item.missing_edges.push_back({r,l+6});
 
             std::sort(item.edges.begin(), item.edges.end());
             all_edge_sets.push_back(item);
@@ -90,7 +85,7 @@ int main() {
     int idx = 0;
     for (const auto& item : all_edge_sets) {
         idx++;
-        std::cout << "\rPermutation [" << idx << " / " << total_edge_sets << "]" << std::flush;
+        std::cout << "\rPermutation [" << idx << " / " << total_edge_sets << "], size (exp.43): " << item.edges.size() << std::flush;
         for (int i = 0; i < 63; i++) {
             std::cout << "Drawing " << std::to_string(i) << std::endl;
 
