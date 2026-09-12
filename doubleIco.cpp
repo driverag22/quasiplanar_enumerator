@@ -87,25 +87,25 @@ int main() {
     std::cout << "Generated " << total_edge_sets << " edge set configurations." << std::endl;
 
     // Iterate through all drawings of K_5
-    for (int i = 0; i < 63; i++) {
-        std::cout << "Drawing " << std::to_string(i) << std::endl;
+    int idx = 0;
+    for (const auto& item : all_edge_sets) {
+        idx++;
+        std::cout << "\rPermutation [" << idx << " / " << total_edge_sets << "]" << std::flush;
+        for (int i = 0; i < 63; i++) {
+            std::cout << "Drawing " << std::to_string(i) << std::endl;
 
-        std::ifstream input_file("../quasiDrawings/K6/jsons/" + std::to_string(i) + ".json");
-        if (!input_file.is_open()) {
-            std::cerr << "Could not open drawing file " << i << std::endl;
-            continue;
-        }
+            std::ifstream input_file("../quasiDrawings/K6/jsons/" + std::to_string(i) + ".json");
+            if (!input_file.is_open()) {
+                std::cerr << "Could not open drawing file " << i << std::endl;
+                continue;
+            }
 
-        nlohmann::json import_data; 
-        input_file >> import_data; 
-        input_file.close();
+            nlohmann::json import_data; 
+            input_file >> import_data; 
+            input_file.close();
 
-        Drawing<klim> base_d(import_data, n);
+            Drawing<klim> base_d(import_data, n);
 
-        int idx = 0;
-        for (const auto& item : all_edge_sets) {
-            idx++;
-            std::cout << "\rPermutation [" << idx << " / " << total_edge_sets << "]" << std::flush;
 
             Drawing<klim> d = base_d;
             const Edges& current_edges = item.edges;
@@ -148,7 +148,7 @@ int main() {
             }
 NEXT_ITEM:;
         }
-        std::cout << "\nDrawing " << std::to_string(i) << " finished." << std::endl;
+        std::cout << "\nPerm " << std::to_string(idx) << " finished." << std::endl;
     }
 
     std::cout << "Found no extendable solutions with k = " << klim << " for split = " << split << std::endl;
