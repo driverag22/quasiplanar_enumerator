@@ -15,8 +15,8 @@ Edges generate3C14Graph() {
         edges.push_back({i, (i + 1) % 14});
 
     // 1b. inner C14 chords at distance 2
-    for (std::size_t i = 0; i < 14; ++i)
-        edges.push_back({i, (i + 2) % 14});
+    // for (std::size_t i = 0; i < 14; ++i)
+    //     edges.push_back({i, (i + 2) % 14});
 
     // 2. inner to middle connections at distance 3
     for (std::size_t i = 0; i < 14; ++i) {
@@ -29,68 +29,16 @@ Edges generate3C14Graph() {
         edges.push_back({14 + i, 14 + ((i + 1) % 14)});
 
     // 3b. middle chords at dist 2
-    for (std::size_t i = 0; i < 14; ++i)
-        edges.push_back({14 + i, 14 + ((i + 2) % 14)});
+    // for (std::size_t i = 0; i < 14; ++i)
+    //     edges.push_back({14 + i, 14 + ((i + 2) % 14)});
 
-    // // 4. middle to outer connections at distance 3
+    // 4. middle to outer connections at distance 3
     // for (std::size_t i = 0; i < 14; ++i) {
     //     if (i % 2 == 0) edges.push_back({14 + i, 14 + ((i + 3) % 14)});
     //     else if (i % 2 == 1) edges.push_back({14 + i, 14 + ((i + 11) % 14)});
     // }
 
-    // // 5. outer C14 cycle (Vertices 28..41)
-    // for (std::size_t i = 0; i < 14; ++i)
-    //     edges.push_back({28 + i, 28 + ((i + 1) % 14)});
-
-    // 5b. Outer C14 chords at distance 2
-    // for (std::size_t i = 0; i < 14; ++i)
-    //     edges.push_back({28 + i, 28 + ((i + 2) % 14)});
-
-    return edges;
-}
-
-Edges genNonQuasi() {
-    Edges edges;
-
-    // 1. inner C14 cycle (Vertices 0..13) - FIXED FIRST EDGES
-    for (std::size_t i = 0; i < 14; ++i)
-        edges.push_back({i, (i + 1) % 14});
-
-    // 1b. inner C14 chords at distance 2
-    for (std::size_t i = 0; i < 14; ++i)
-        edges.push_back({i, (i + 2) % 14});
-
-    // 2. inner to middle connections at distance 2
-    for (std::size_t i = 0; i < 14; ++i) {
-        if (i % 2 == 0) {
-            edges.push_back({i, 14 + ((i + 2) % 14)});
-            edges.push_back({i, 14 + ((i + 12) % 14)});
-        } else {
-            edges.push_back({i, 14 + i});
-            edges.push_back({i, 14 + ((i + 1) % 14)});
-        }
-    }
-
-    // 3. middle C14 cycle (Vertices 14..27)
-    for (std::size_t i = 0; i < 14; ++i)
-        edges.push_back({14 + i, 14 + ((i + 1) % 14)});
-
-    // 3b. middle chords at dist 2
-    for (std::size_t i = 0; i < 14; ++i)
-        edges.push_back({14 + i, 14 + ((i + 2) % 14)});
-
-    // // 4. middle to outer connections at distance 3
-    // for (std::size_t i = 0; i < 14; ++i) {
-    //     if (i % 2 == 0) {
-    //         edges.push_back({14 + i, 28 + ((i + 2) % 14)});
-    //         edges.push_back({14 + i, 28 + ((i + 12) % 14)});
-    //     } else {
-    //         edges.push_back({14 + i, 28 + i});
-    //         edges.push_back({14 + i, 28 + ((i + 1) % 14)});
-    //     }
-    // }
-
-    // // 5. outer C14 cycle (Vertices 28..41)
+    // 5. outer C14 cycle (Vertices 28..41)
     // for (std::size_t i = 0; i < 14; ++i)
     //     edges.push_back({28 + i, 28 + ((i + 1) % 14)});
 
@@ -130,12 +78,32 @@ bool is_drawing_extendable(const Drawing<klim>& d, std::size_t num_vertices) {
     return false;
 }
 
+// innermost and outermost C_{14} edges are uncrossed
+inline bool is_protected_edge(std::size_t edge_idx) {
+    return (edge_idx < 14) || (edge_idx >= 28 && edge_idx < 42);
+}
+
+bool path_crosses_protected(const HdsPath& p, std::size_t current_edge_idx) {
+    // if the current edge being added is an inner or outer cycle edge, it must have 0 crossings
+    if (is_protected_edge(current_edge_idx) && p.size() > 2) {
+        return true;
+    }
+
+    // check if path 'p' crosses any protected edge along the way
+    for (std::size_t i = 1; i + 1 < p.size(); ++i) {
+        if (p[i] != nullptr && p[i]->edge != nullptr) {
+            if (is_protected_edge(p[i]->edge->label)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
 int main() {
     std::cout << "\n\n ===================================================== \n";
-    std::cout << "c14, genNonQuasi, k = " << klim << ", n = " << n << std::endl;
-    const Edges edges = genNonQuasi();
-    // const std::size_t minimal_cr = 0;
+    std::cout << "c14, k = " << klim << ", n = " << n << std::endl;
+    const Edges edges = generate3C14Graph();
     std::vector< Drawing<klim> > solutions;
     std::vector<std::size_t> d_cnt(30000,0); // assume no more than 10000 unique drawings up to iso
 
@@ -143,22 +111,15 @@ int main() {
     // Edge 0: (0,1)
     d.add_first_edge(edges[0][0], edges[0][1]);
     // Edges 1..12: (1,2), (2,3), ..., (12,13)
-    for (std::size_t i = 1; i < 13; ++i) {
+    for (std::size_t i = 1; i < 14; ++i) {
         std::size_t u = edges[i][0];
         std::size_t v = edges[i][1];
         HdsPath p = d.first_path(u, v);
-        if (p.empty()) {
-            throw std::runtime_error("Failed to build the initial C14 cycle path!");
-        }
-        d.add_edge(p, v);
-    }
-    // Edge 13: Closing the first C14 cycle (13, 0)
-    {
-        std::size_t u = edges[13][0];
-        std::size_t v = edges[13][1];
-        HdsPath p = d.first_path(u, v);
-        if (p.empty()) {
-            throw std::runtime_error("Failed to close the initial C14 cycle!");
+        while (!p.empty() && path_crosses_protected(p, i)) {
+            if (!d.next_path(p, v)) {
+                p.clear();
+                break;
+            }
         }
         d.add_edge(p, v);
     }
@@ -173,14 +134,11 @@ int main() {
     for (auto e = start_edge;;) {
         ++total_iterations;
         size_t current_depth = std::distance(start_edge, e);
+        size_t current_edge_idx = std::distance(edges.begin(), e);
 
-        if (current_depth > max_depth_reached) {
-            max_depth_reached = current_depth;
-            std::cout << "\r[New Max Depth] " << max_depth_reached << "/" << total_edges << std::flush;
-        }
-
-        if (total_iterations % 100000 == 0) {
-            std::cout << "\rIter: " << total_iterations << " | Depth: " << current_depth << "/" << total_edges << " | Choices: [";
+        if (current_depth > max_depth_reached) max_depth_reached = current_depth;
+        if (total_iterations % 1000 == 0) {
+            std::cout << "\r\033[K Iter: " << total_iterations << " | Depth: " << current_depth << "/" << total_edges << " | Max Depth: " << max_depth_reached << " | Choices: [";
             for (size_t i = 0; i <= current_depth; ++i) std::cout << path_choice[i] << " ";
             std::cout << "]" << std::flush;
         }
@@ -188,6 +146,14 @@ int main() {
         std::size_t u = (*e)[0];
         std::size_t v = (*e)[1];
         HdsPath p = d.first_path(u, v);
+
+        // Advance until finding a path that does NOT cross protected edges
+        while (!p.empty() && path_crosses_protected(p, current_edge_idx)) {
+            if (!d.next_path(p, v)) {
+                p.clear();
+                break;
+            }
+        }
 
         if (p.empty()) {
 BACKUP:
@@ -204,7 +170,19 @@ BACKUP:
                 assert(v == d.edges.back().v);
                 p = d.edges.back().built;
                 d.remove_edge();
-            } while (!d.next_path(p, v));
+
+                current_edge_idx = std::distance(edges.begin(), e);
+
+                bool found_valid = false;
+                while (d.next_path(p, v)) {
+                    if (!path_crosses_protected(p, current_edge_idx)) {
+                        found_valid = true;
+                        break;
+                    }
+                }
+
+                if (found_valid) break;
+            } while (true);
 
             size_t backtracked_depth = std::distance(start_edge, e);
             path_choice[backtracked_depth]++;
@@ -227,9 +205,7 @@ BACKUP:
             }
             if (newSol) {
                 solutions.push_back(d);
-                // if (is_drawing_extendable(d,n)) std::cout << "Not maximal!" << std::endl;
-                // minimal_cr = std::min(minimal_cr, d.crossings.size());
-                if (++counter % 25 == 0) std::cout << "\r Solutions found: " << counter << std::flush;
+                // if (++counter % 25 == 0) std::cout << "\r Solutions found: " << counter << std::flush;
             }
             goto BACKUP;
         }
@@ -240,8 +216,12 @@ END:
         return 0;
     }
 
-    // std::size_t idx = 0;
-    // for (auto it = solutions.begin();it!=solutions.end();it++) {
+    std::size_t idx = 0;
+    for (auto it = solutions.begin();it!=solutions.end();it++) {
+        std::cout << "Drawing " << idx++ << std::endl;
+        if ((*it).is_drawing_extendable()) {
+            std::cout << "is extendable!" << std::endl;
+        }
     //     std::string filename = "../drawingsQuasi/K9/minGlobalCr/jsons/" + std::to_string(idx) + ".json";
     //     std::ofstream of_json(filename);
     //     nlohmann::ordered_json output_json = (*it).serialize_to_json();
@@ -253,12 +233,10 @@ END:
     //     // (*it).graphml_output(of_graphml);
     //     // of_graphml.close();
     //     idx++;
-    // }
+    }
 
     std::cout << "Found " << counter << " drawings in total." << std::endl;
     std::cout << "Found " << solutions.size() << " unique drawings in total." << std::endl;
-    // std::cout << "Found " << idx << " min crossing drawings in total." << std::endl;
-    // std::cout << "Minimal Crossing Number is "<<minimal_cr<<std::endl;
 
     for (std::size_t i = 0; i < solutions.size(); i++) {
         std::cout << "Drawing-" << i << " has " << d_cnt[i] << " isomorphic drawings" << std::endl;

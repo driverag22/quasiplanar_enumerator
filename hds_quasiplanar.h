@@ -1198,6 +1198,31 @@ struct Drawing {
         return find_matching_dfs(uncrossed_edges, vertex_used, 0, 0, target_size);
     }
 
+
+    bool is_drawing_extendable() {
+        const std::size_t num_vertices = vertices.size();
+        std::vector<std::vector<bool>> adj(num_vertices, std::vector<bool>(num_vertices, false));
+        for (const auto& edge : edges) {
+            adj[edge.u][edge.v] = true;
+            adj[edge.v][edge.u] = true;
+        }
+
+        std::vector<std::pair<std::size_t, std::size_t>> missing;
+        for (std::size_t u = 0; u < num_vertices; ++u)
+            for (std::size_t v = u + 1; v < num_vertices; ++v)
+                if (!adj[u][v]) missing.push_back({u, v});
+
+        for (const auto& [u, v] : missing) {
+            HdsPath p = first_path(u, v);
+
+            if (!p.empty()) {
+                std::cout << "Edge: " << u << " , " << v << "\n";
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Extract abstract graph as a list of canonical, sorted edges
     nlohmann::json extract_abstract_graph() const {
         nlohmann::json j_graph = nlohmann::json::array();
