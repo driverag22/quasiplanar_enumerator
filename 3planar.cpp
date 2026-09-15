@@ -1,7 +1,6 @@
 #include "hds_kplanar.h"
 #include "iso.h"
 #include <fstream>
-// #include <set>
 
 typedef std::vector<std::size_t> Edge;
 typedef std::vector<Edge> Edges;
@@ -19,12 +18,16 @@ const Edges edges = {
     {5,12},
     {10,11},
     {9,12},
+    // to verify that (0,2) is isolated from the rest of the vertices, uncomment below
+    // and run assert(!d.is_drawing_extendable())
+    // {0,13},
+    // {2,13}, 
 };
 
 const std::size_t n = 13;
 const std::size_t klim = 3;
 const std::string src = "extension_8_rel";
-const std::string dir = "k8_8_9_10";
+const std::string dir = "gadget_drawings";
 
 int main() {
     std::vector< Drawing<klim> > solutions;
@@ -62,7 +65,7 @@ BACKUP:
             d.add_edge(p, v);
 
             if (++e == edges.end()) {
-                if (d_n != 4) std::cout << "Different solution!!!\n";
+                assert(d_n == 4); // only last K_{8}+5 drawing used
                 bool newSol = true;
                 for (auto it = solutions.begin(); it != solutions.end(); it++) {
                     if(are_isomorphic((*it),d)) {
@@ -71,20 +74,22 @@ BACKUP:
                     }
                 }
                 if (newSol) {
+                    // assert(!d.is_drawing_extendable());
+                    std::cout << cnt++ << std::endl;
                     solutions.push_back(d);
                     for (const auto& e : d.edges) {
                         if (e.u == 0 && e.v == 2) {
-                            if (e.ncr != 0) {
-                                std::cout << "CROSSED\n";
-                            }
+                            assert(e.ncr == 0);
                         } else if (e.u == 1 && e.v == 7) {
-                            if (e.ncr != 3) {
-                                std::cout << "(1,7) NOT CROSSED ENOUGH\n";
-                            }
+                            assert(e.ncr == 3);
                         } else if (e.u == 3 && e.v == 7) {
-                            if (e.ncr != 3) {
-                                std::cout << "(3,7) NOT CROSSED ENOUGH\n";
-                            }
+                            assert(e.ncr == 3);
+                        } else if (e.u == 0 && e.v == 3) {
+                            assert(e.ncr == 3);
+                        } else if (e.u == 1 && e.v == 3) {
+                            assert(e.ncr == 3);
+                        } else if (e.u == 1 && e.v == 2) {
+                            assert(e.ncr == 3);
                         }
                     }
                 }
@@ -92,30 +97,26 @@ BACKUP:
             }
         }
 END:
-        std::cout << cnt++ << std::endl;
+        std::cout << "Drawing " << d_n << " done\n";
     }
 
     std::cout << "Found " << solutions.size() << " drawings in total." << std::endl;
     if(solutions.size() == 0) return 0;
 
-    std::size_t idx = 0;
-    for (auto it = solutions.begin();it!=solutions.end();it++) {
-        std::cout << "Drawing " << idx << "\n";
-        if ((*it).is_drawing_extendable()) {
-            std::cout << "EXTENDABLE" << std::endl;
-        }
-        // std::string filename = "../quasiDrawings/K8_3planar/extension_deg5_vertex/" + dir + "/" + std::to_string(idx) + ".json";
-        // std::ofstream of_json(filename);
-        // nlohmann::ordered_json output_json = (*it).serialize_to_json();
-        // of_json << output_json.dump(4);
-        // of_json.close();
+    // std::size_t idx = 0;
+    // for (auto it = solutions.begin();it!=solutions.end();it++) {
+    //     std::string filename = "../quasiDrawings/K8_3planar/extension_deg5_vertex/" + dir + "/" + std::to_string(idx) + ".json";
+    //     std::ofstream of_json(filename);
+    //     nlohmann::ordered_json output_json = (*it).serialize_to_json();
+    //     of_json << output_json.dump(4);
+    //     of_json.close();
 
-        // std::string filename2 = "../quasiDrawings/K8_3planar/extension_deg5_vertex/" + dir + "/" + std::to_string(idx) + ".graphml";
-        // std::ofstream of_graphml(filename2);
-        // (*it).graphml_output(of_graphml);
-        // of_graphml.close();
-        idx++;
-    }
+    //     std::string filename2 = "../quasiDrawings/K8_3planar/extension_deg5_vertex/" + dir + "/" + std::to_string(idx) + ".graphml";
+    //     std::ofstream of_graphml(filename2);
+    //     (*it).graphml_output(of_graphml);
+    //     of_graphml.close();
+    //     idx++;
+    // }
 
     return 0;
 }
