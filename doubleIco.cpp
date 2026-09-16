@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <iostream>
 #include <cassert>
+#include <chrono>
 
 typedef std::vector<std::size_t> Edge;
 typedef std::vector<Edge> Edges;
@@ -41,36 +42,15 @@ std::vector<EdgeSetWithMissing> generate_edge_sets() {
                     item.edges.push_back({u, v});
                 }
             }
-            item.missing_edges = v1_v2_matching;
-            item.missing_edges.push_back({l,r+6});
-            item.missing_edges.push_back({r,l+6});
+            // item.missing_edges = v1_v2_matching;
+            // item.missing_edges.push_back({l,r+6});
+            // item.missing_edges.push_back({r,l+6});
 
             std::sort(item.edges.begin(), item.edges.end());
             all_edge_sets.push_back(item);
         }
     }
     return all_edge_sets;
-}
-
-bool is_drawing_extensible(const Drawing<klim>& d, 
-        const std::vector<std::pair<std::size_t, std::size_t>>& missingEdges) {
-    for (const auto& [u, v] : missingEdges) {
-        Drawing<klim> d_search(d);
-        HdsPath p = d_search.first_path(u, v);
-
-        while (!p.empty()) {
-            Drawing<klim> d_test(d);
-            d_test.add_edge(p, v);
-            if (d_test.verify_quasiplanarity()) {
-                std::cout << "\n  [!] Edge (" << u << ", " << v << ") can be legally added!";
-                return true;
-            } else {
-                std::cout << "not quasi!\n";
-            }
-            if (!d_search.next_path(p, v)) break;
-        }
-    }
-    return false;
 }
 
 int main() {
@@ -83,10 +63,12 @@ int main() {
 
     // Iterate through all drawings of K_5
     int idx = 0;
+    const std::chrono::duration<double> timePerIter = std::chrono::duration<double>(3600);
     for (const auto& item : all_edge_sets) {
         idx++;
         std::cout << "\rPermutation [" << idx << " / " << total_edge_sets << "], size (exp.43): " << item.edges.size() << std::flush;
         for (int i = 0; i < 63; i++) {
+            auto start_time = std::chrono::steady_clock::now();
             std::cout << "Drawing " << std::to_string(i) << std::endl;
 
             std::ifstream input_file("../quasiDrawings/K6/jsons/" + std::to_string(i) + ".json");
@@ -104,11 +86,14 @@ int main() {
 
             Drawing<klim> d = base_d;
             const Edges& current_edges = item.edges;
-            const auto& missing_edges = item.missing_edges;
 
             auto start_edge = current_edges.begin();
 
             for (auto e = start_edge;;) {
+                if (std::chrono::steady_clock::now() - start_time > std::chrono::hours(1)) {
+                    std::cout << "Permutation "  << idx << " drawing " << i << " exceeded 1 hour limit. Skipping remainder.\n";
+                    continue;
+                }
                 std::size_t u = (*e)[0];
                 std::size_t v = (*e)[1];
                 HdsPath p = d.first_path(u, v);
@@ -134,10 +119,6 @@ int main() {
                 if (++e == current_edges.end()) {
                     std::cout << "\nFound solution for drawing " << i << "!" << std::endl;
                     if (!d.verify_quasiplanarity()) std::cout << "not quasi?\n";
-                    if (is_drawing_extensible(d, missing_edges)) {
-                        std::cout << "extensible\n";
-                        return 0;
-                    }
                     goto NEXT_ITEM;
                 }
             }
