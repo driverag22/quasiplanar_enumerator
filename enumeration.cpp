@@ -18,44 +18,38 @@ Edges generateCompleteGraph(std::size_t n) {
     return edges;
 }
 
-const std::size_t n = 9; // note hard-coded limit of 64 edges for quasiplanar...
+const std::size_t n = 6; // note hard-coded limit of 64 edges for quasiplanar...
 //const std::string split = "3t1i";
-// const Edges edges =
-// {
-//     {0,1},{0,2},{0,3},{0,4},{0,5},{0,6},{0,7},{0,8},{0,9},{0,10},
-//     {1,2}, {1,3},{1,4},{1,5},{1,6},{1,7},{1,8},{1,9},
-//     {2,3},{2,4},{2,5},{2,6},{2,7},{2,8},{2,9},
-//     {3,4},{3,5},{3,6},{3,7},{3,8},{3,9},
-//     {4,5},{4,6},{4,7},{4,8},{4,9},
-//     {5,6},{5,7},{5,8},{5,9},
-//     {6,7},{6,8},{6,9},
-//     {7,8},{7,9},
-//     {8,9},
-// };
+const Edges edges =
+{
+    {0,1},{1,2},{2,3},{3,4},{4,5},{0,5},
 
-const std::size_t klim = 15;
+    {0,2},{0,3},{0,4},
+    {1,4},
+    {2,4},{2,5},
+};
+
+const std::size_t klim = 5;
 
 int main() {
     std::cout << "\n\n ===================================================== \n";
     std::cout << "k = " << klim << ", n = " << n << std::endl;
-    const Edges edges = generateCompleteGraph(n);
+    // const Edges edges = generateCompleteGraph(n);
     const std::size_t minimal_cr = 36;
     std::vector< Drawing<klim> > solutions;
     std::vector<std::size_t> d_cnt(10000,0); // assume no more than 10000 unique drawings up to iso
 
     Drawing<klim> d(n);
     d.add_first_edge(edges[0][0], edges[0][1]);
-    std::size_t num_fixed_edges = n;
-    for (std::size_t i = 2; i < num_fixed_edges; ++i) {
-        HdsPath p = d.first_path(0, i);
+    for (std::size_t i = 1; i < 6; ++i) {
+        HdsPath p = d.first_path(edges[i][0], edges[i][1]);
         if (p.empty()) {
             throw std::runtime_error("Failed to build the initial star!");
         }
-        d.add_edge(p, i);
+        d.add_edge(p, edges[i][1]);
     }
     std::cout << "Star built" << std::endl;
-
-    auto start_edge = edges.begin() + (num_fixed_edges-1);
+    auto start_edge = edges.begin() + 6;
     // auto start_edge = edges.begin() + 1;
 
     int counter = 0;
@@ -109,22 +103,16 @@ END:
 
     std::size_t idx = 0;
     for (auto it = solutions.begin();it!=solutions.end();it++) {
-        if (!(*it).verify_non_crossing_matching()) {
-            std::cout << "no non crossing matching!" << std::endl;
-        }
-        if (!(*it).verify_vertex_non_crossing_edge()) {
-            std::cout << "vertex without non-crossing edge!" << std::endl;
-        }
-        std::string filename = "../drawingsQuasi/K9/minGlobalCr/jsons/" + std::to_string(idx) + ".json";
+        std::string filename = "../quasiDrawings/hexagon/" + std::to_string(idx) + ".json";
         std::ofstream of_json(filename);
         nlohmann::ordered_json output_json = (*it).serialize_to_json();
         of_json << output_json.dump(4);
         of_json.close();
 
-        // std::string filename2 = "drawings/K7_prop_test/minCr_" + std::to_string(idx) + ".graphml";
-        // std::ofstream of_graphml(filename2);
-        // (*it).graphml_output(of_graphml);
-        // of_graphml.close();
+        std::string filename2 = "../quasiDrawings/hexagon/" + std::to_string(idx) + ".graphml";
+        std::ofstream of_graphml(filename2);
+        (*it).graphml_output(of_graphml);
+        of_graphml.close();
         idx++;
     }
 

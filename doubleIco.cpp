@@ -52,7 +52,7 @@ std::vector<EdgeSetWithMissing> generate_edge_sets() {
     return all_edge_sets;
 }
 
-bool is_drawing_extendable(const Drawing<klim>& d, 
+bool is_drawing_extensible(const Drawing<klim>& d, 
         const std::vector<std::pair<std::size_t, std::size_t>>& missingEdges) {
     for (const auto& [u, v] : missingEdges) {
         Drawing<klim> d_search(d);
@@ -134,8 +134,8 @@ int main() {
                 if (++e == current_edges.end()) {
                     std::cout << "\nFound solution for drawing " << i << "!" << std::endl;
                     if (!d.verify_quasiplanarity()) std::cout << "not quasi?\n";
-                    if (is_drawing_extendable(d, missing_edges)) {
-                        std::cout << "extendable\n";
+                    if (is_drawing_extensible(d, missing_edges)) {
+                        std::cout << "extensible\n";
                         return 0;
                     }
                     goto NEXT_ITEM;
@@ -146,6 +146,6 @@ NEXT_ITEM:;
         std::cout << "\nPerm " << std::to_string(idx) << " finished." << std::endl;
     }
 
-    std::cout << "Found no extendable solutions with k = " << klim << " for split = " << split << std::endl;
+    std::cout << "Found no extensible solutions with k = " << klim << " for split = " << split << std::endl;
     return 0;
 }

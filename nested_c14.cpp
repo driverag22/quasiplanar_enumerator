@@ -52,31 +52,6 @@ Edges generate3C14Graph() {
 const std::size_t n = 28;
 const std::size_t klim = 3;
 
-std::vector<std::pair<std::size_t, std::size_t>> get_missing_edges(const Drawing<klim>& d, std::size_t num_vertices) {
-    std::vector<std::vector<bool>> adj(num_vertices, std::vector<bool>(num_vertices, false));
-    for (const auto& edge : d.edges) {
-        adj[edge.u][edge.v] = true;
-        adj[edge.v][edge.u] = true;
-    }
-
-    std::vector<std::pair<std::size_t, std::size_t>> missing;
-    for (std::size_t u = 0; u < num_vertices; ++u)
-        for (std::size_t v = u + 1; v < num_vertices; ++v)
-            if (!adj[u][v]) missing.push_back({u, v});
-    return missing;
-}
-
-bool is_drawing_extendable(const Drawing<klim>& d, std::size_t num_vertices) {
-    auto missing_edges = get_missing_edges(d, num_vertices);
-
-    for (const auto& [u, v] : missing_edges) {
-        Drawing<klim> d_search(d);
-        HdsPath p = d_search.first_path(u, v);
-        if (!p.empty()) return true;
-    }
-
-    return false;
-}
 
 // innermost and outermost C_{14} edges are uncrossed
 inline bool is_protected_edge(std::size_t edge_idx) {
@@ -219,8 +194,8 @@ END:
     std::size_t idx = 0;
     for (auto it = solutions.begin();it!=solutions.end();it++) {
         std::cout << "Drawing " << idx++ << std::endl;
-        if ((*it).is_drawing_extendable()) {
-            std::cout << "is extendable!" << std::endl;
+        if ((*it).is_drawing_extensible()) {
+            std::cout << "is extensible!" << std::endl;
         }
     //     std::string filename = "../drawingsQuasi/K9/minGlobalCr/jsons/" + std::to_string(idx) + ".json";
     //     std::ofstream of_json(filename);

@@ -19,7 +19,7 @@ const Edges edges = {
     {10,11},
     {9,12},
     // to verify that (0,2) is isolated from the rest of the vertices, uncomment below
-    // and run assert(!d.is_drawing_extendable())
+    // and run assert(!d.is_drawing_extensible())
     // {0,13},
     // {2,13}, 
 };
@@ -74,7 +74,7 @@ BACKUP:
                     }
                 }
                 if (newSol) {
-                    // assert(!d.is_drawing_extendable());
+                    // assert(!d.is_drawing_extensible());
                     std::cout << cnt++ << std::endl;
                     solutions.push_back(d);
                     for (const auto& e : d.edges) {

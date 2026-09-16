@@ -931,7 +931,7 @@ struct Drawing {
         return true;
     }
 
-    bool is_drawing_extendable() {
+    bool is_drawing_extensible() {
         const std::size_t num_vertices = vertices.size();
         std::vector<std::vector<bool>> adj(num_vertices, std::vector<bool>(num_vertices, false));
         for (const auto& edge : edges) {
