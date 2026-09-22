@@ -16,6 +16,11 @@ const std::size_t klim = 3; // 3-planar
 const std::size_t CYCLE_SIZE = 14;
 const std::size_t MAX_CYCLES = 2;
 
+// Queue node wrapping drawing and explicit depth level
+struct SearchNode {
+    Drawing<klim> drawing;
+    std::size_t depth;
+};
 
 // Max-Flow Dual Network Structure
 struct DualNetwork {
@@ -95,9 +100,8 @@ inline std::pair<const HdsHalfedge*, std::size_t> prev_active(
 }
 
 int main() {
-    std::vector< Drawing<klim> > solutions;
-    Drawing<klim> base = create_base_drawing();
-    solutions.push_back(base);
+    std::vector< SearchNode > solutions;
+    solutions.push_back({create_base_drawing(),0});
 
     // #discarded solutions (isomorphic to a known solution)
     std::size_t discarded = 0;
@@ -107,14 +111,13 @@ int main() {
     std::size_t fullsolcount = 0;
 
     while (solcount < solutions.size()) {
+        Drawing<klim> d_parent = solutions[solcount].drawing;
+        const std::size_t current_depth = solutions[solcount].depth;
         std::cout << "\n--- Processing Partial Drawing #" << solcount 
+            << " [Cycle Level " << current_depth << "]"
             << " (Queue Size: " << solutions.size() << ") ---" << std::endl;
 
-        Drawing<klim> d_parent = solutions[solcount];
-        std::size_t offset = d_parent.vertices.size();
-
-        std::size_t current_cycle = (offset - 1) / CYCLE_SIZE;
-        if (MAX_CYCLES > 0 && current_cycle >= MAX_CYCLES) {
+        if (MAX_CYCLES > 0 && current_depth >= MAX_CYCLES) {
             std::cout << "--> Reached MAX_CYCLES limit (" << MAX_CYCLES 
                       << "). Skipping further cycle extension for Drawing #" << solcount << std::endl;
             ++solcount;
@@ -229,11 +232,11 @@ BACKUP:
                             net.add_edge(source, num_faces + i, 1);
 
                         // edges between faces and from (active cycle) vertices to incident faces
-                        std::size_t active_cycle_end = offset + CYCLE_SIZE;
+                        std::size_t active_cycle_end = nm14 + CYCLE_SIZE;
                         for (auto i = d.halfedges.begin(); i != d.halfedges.end(); ++i) {
                             // active cycle vertex -> incident face
-                            if (i->vertex->label >= offset && i->vertex->label < active_cycle_end)
-                                net.add_edge(num_faces + (i->vertex->label - offset), face[i->label], 1);
+                            if (i->vertex->label >= nm14 && i->vertex->label < active_cycle_end)
+                                net.add_edge(num_faces + (i->vertex->label - nm14), face[i->label], 1);
 
                             // face -> adjacent face dual edge
                             int remaining_capacity = static_cast<int>(klim) - static_cast<int>(i->edge->ncr);
@@ -246,7 +249,7 @@ BACKUP:
                         // Potential final faces
                         std::vector<int> pff;
                         for (std::size_t f = 0; f < num_faces; ++f) {
-                            if (net.flow(static_cast<int>(source), static_cast<int>(f)) >= 14) {
+                            if (static_cast<std::size_t>(net.flow(static_cast<int>(source), static_cast<int>(f))) >= CYCLE_SIZE) {
                                 pff.push_back(static_cast<int>(f));
                             }
                         }
@@ -284,7 +287,7 @@ BACKUP:
                             const HdsHalfedge* e_curr = fhedge[i];
                             do {
                                 std::size_t v = e_curr->vertex->label;
-                                if (v >= offset && v < active_cycle_end) // active vertex
+                                if (v >= nm14 && v < active_cycle_end) // active vertex
                                     for (const HdsHalfedge* f = e_curr->next->next; f != e_curr; f = f->next) {
                                         if (f->edge->ncr < klim &&
                                                 f->vertex->label != v &&
@@ -327,11 +330,11 @@ BACKUP:
                                 e = e->next->twin;
                             } while (e != i->halfedge);
 
-                            if (i->label >= offset && i->label < offset + CYCLE_SIZE) {
+                            if (i->label >= nm14 && i->label < active_cycle_end) {
                                 // if no incident face is relevant, then 
                                 // this isnt a valid solution
                                 if (nirf == 0) goto BACKUP;
-                                relv[(i->label) - offset] = a;
+                                relv[(i->label) - nm14] = a;
                             } else if (nirf >= 2)
                                 relv.push_back(a);
                             else if (nirf == 1)
@@ -452,8 +455,10 @@ BACKUP:
                             }
                         }
 
-                        // Add an uncrossable star in each (large) black face
+                        // process black faces
                         std::vector<bool> blackdone(nd.halfedges.size(), false);
+                        std::vector<HdsHalfedge*> large_black_faces;
+
                         std::size_t nbf = 0; // #black faces on >=4 vertices
                         for (auto i = black.begin(); i != black.end(); ++i) {
                             if (blackdone[(*i)->label]) continue;
@@ -466,33 +471,38 @@ BACKUP:
                                 j = j->next;
                             } while (j != *i);
 
-                            if (bc >= 4) {
-                                // for large black regions, add an uncrossable star center vertex
-                                if (++nbf >= 2)
-                                    throw std::runtime_error("too many large black regions");
+                            if (bc >= 4) large_black_faces.push_back(*i);
+                        }
+                        // allocate extra star vertices if more than one black face
+                        if (large_black_faces.size() > 1)
+                            nd.add_vertices(large_black_faces.size() - 1);
 
-                                j = *i;
-                                auto x = nd.add_edge(HdsPath({j, nullptr}), nd.vertices.size() - 1, klim);
-                                for (;;) {
-                                    j = j->next->twin->next;
-                                    if (j == *i) break;
-                                    nd.add_edge(HdsPath({j, x}), nd.vertices.size() - 1, klim);
-                                }
+                        // add an uncrossable star in each (large) black face
+                        std::size_t star_v = relv.size(); // First dummy star vertex index
+                        for (auto start_edge : large_black_faces) {
+                            auto j = start_edge;
+                            // Connect the first boundary vertex to the assigned star hub vertex
+                            auto x = nd.add_edge(HdsPath({j, nullptr}), star_v, klim);
+                            for (;;) {
+                                j = j->next->twin->next; // jump over added spoke
+                                if (j == start_edge) break;
+                                nd.add_edge(HdsPath({j, x}), star_v, klim);
                             }
+                            ++star_v; // Increment hub index for the next large black region
                         }
 
                         for (auto x = solutions.begin(); x != solutions.end(); ++x) {
-                            if (are_isomorphic(*x, nd)) {
+                            if (are_isomorphic(x->drawing, nd)) {
                                 std::cout << "--- Discard drawing #" << discarded
                                     << ", isomorphic to solution #"
                                     << (x - solutions.begin()) << std::endl;
 
-                                std::ofstream of;
-                                std::ostringstream filename;
-                                filename << "discard-" << discarded << ".graphml";
-                                of.open(filename.str());
-                                d.graphml_output(of);
-                                of.close();
+                                // std::ofstream of;
+                                // std::ostringstream filename;
+                                // filename << "discard-" << discarded << ".graphml";
+                                // of.open(filename.str());
+                                // d.graphml_output(of);
+                                // of.close();
 
                                 ++discarded;
                                 goto BACKUP;
@@ -501,7 +511,7 @@ BACKUP:
 
                         // we have a new, valid solution -> record it
                         if (!nd.is_valid()) throw std::runtime_error("nd is invalid");
-                        solutions.push_back(nd);
+                        solutions.push_back({nd, current_depth+1});
                         is_extensible = true; // Mark as extensible to enable Pass 2
                         std::cout << "Drawing #" << solutions.size()-1 << ":\n"
                             << d << std::endl;
