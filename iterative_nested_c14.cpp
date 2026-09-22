@@ -14,7 +14,7 @@
 
 const std::size_t klim = 3; // 3-planar
 const std::size_t CYCLE_SIZE = 14;
-const std::size_t MAX_CYCLES = 3;
+const std::size_t MAX_CYCLES = 2;
 
 
 // Max-Flow Dual Network Structure
@@ -48,22 +48,6 @@ struct DualNetwork {
 
 typedef std::vector<std::size_t> Edge;
 typedef std::vector<Edge> Edges;
-
-Edges generate_extension_edges(std::size_t offset) {
-    Edges edges;
-
-    // matching edges from C14_{i} to C14_{i+1}
-    for (std::size_t i = 0; i < CYCLE_SIZE; ++i) {
-        if (i % 2 == 0) edges.push_back({i, offset + ((i + 3) % CYCLE_SIZE)});
-        else edges.push_back({i, offset + ((i + 11) % CYCLE_SIZE)});
-    }
-
-    // cycle C14_{i+1} edges
-    for (std::size_t i = 0; i < CYCLE_SIZE; ++i)
-        edges.push_back({offset + i, offset + ((i + 1) % CYCLE_SIZE)});
-
-    return edges;
-}
 
 Drawing<klim> create_base_drawing() {
     // 14 vertices for C14_1 + 1 dummy star vertex = 15 vertices
@@ -137,12 +121,12 @@ int main() {
             continue;
         }
 
-        const Edges local_edges = generate_extension_edges(offset);
         bool is_extensible = false;
         // Two-Pass Loop
         // Pass 0 (constrained == 0): Unconstrained extension & subdrawing extraction
         // Pass 1 (constrained == 1): Constrained (uncrossable) decagon completion
         for (int constrained = 0; constrained < 2; ++constrained) {
+
             // Pass 2 (constrained == 1) only runs if Pass 1 proved extensibility
             if (constrained == 1 && !is_extensible) {
                 std::cout << "--> Skipping Constrained Pass 2 (Drawing #" << solcount 
@@ -153,9 +137,31 @@ int main() {
                 << " for Drawing #" << solcount << " <<<" << std::endl;
 
             Drawing<klim> d = d_parent;
-
-            // 14 vertices for next cycle C14_i
+            std::size_t nm14 = d.vertices.size();
             d.add_vertices(CYCLE_SIZE);
+            std::vector<Edge> local_edges = {
+                {0,nm14+11}, // one matching
+                // outer cycle
+                {nm14+11,nm14+12,3},
+                {nm14+12,nm14+13,3},
+                {nm14+13,nm14   ,3},
+                {nm14   ,nm14+1 ,3},
+                {nm14+1 ,nm14+2 ,3},
+                {nm14+2 ,nm14+3 ,3},
+                {nm14+3 ,nm14+4 ,3},
+                {nm14+4 ,nm14+5 ,3},
+                {nm14+5 ,nm14+6 ,3},
+                {nm14+6 ,nm14+7 ,3},
+                {nm14+7 ,nm14+8 ,3},
+                {nm14+8 ,nm14+9 ,3},
+                {nm14+9 ,nm14+10,3},
+                {nm14+10,nm14+11,3},
+                // rest of matching
+                // EVEN: (i, nm14 + ( (i+11) % 14)) == (i, nm14 + ( (i-3) % 14))
+                // ODD: (i, nm14 + ( (i+3) % 14)) == (i, nm14 + ( (i-11) % 14))
+                {2,nm14+13},{4,nm14+1},{6,nm14+3},{8,nm14+5},{10,nm14+7},{12,nm14+9},
+                {1,nm14+4},{3,nm14+6},{5,nm14+8},{7,nm14+10},{9,nm14+11},{11,nm14+0},{13,nm14+2}
+            };
 
             auto e = local_edges.begin();
             uint64_t total_local_iterations = 0;
