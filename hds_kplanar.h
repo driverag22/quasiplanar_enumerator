@@ -549,6 +549,7 @@ struct Drawing {
                     HdsHalfedge* v_start = (x == 1) ? p[0] : p[x-1]->twin;
                     HdsHalfedge* v_end = p[x];
 
+                    // if we reach earlier segment of current edge, we follow it and mark it as jumped
                     if (p[i] == v_end) { 
                         p[i] = v_start; 
                         jumped[x] = 1;
@@ -595,17 +596,17 @@ struct Drawing {
                     HdsHalfedge* v_start = (x == 1) ? p[0] : p[x-1]->twin;
                     HdsHalfedge* v_end = p[x];
 
+                    // if we reach earlier segment of current edge, we follow it and mark it as jumped
                     if (p[ci] == v_end) { 
                         p[ci] = v_start; 
-                        jumped[x] = 1; // Mark as jumped
+                        jumped[x] = 1; // mark as jumped to avoid infinite looping
                         changed = true; 
-                        break; // Restart the while loop safely
-                    }
-                    else if (p[ci] == v_start) { 
+                        break;
+                    } else if (p[ci] == v_start) { 
                         p[ci] = v_end; 
-                        jumped[x] = 1; // Mark as jumped
+                        jumped[x] = 1;
                         changed = true; 
-                        break; // Restart the while loop safely
+                        break;
                     }
                 }
             }
@@ -614,10 +615,9 @@ struct Drawing {
 
             // avoid crossing edges with overlapping nodes
             if (p[ci]->edge->u == u || p[ci]->edge->u == v ||
-                    p[ci]->edge->v == u || p[ci]->edge->v == v ||
-                    p[ci]->edge->ncr >= max_crossings) {
+                p[ci]->edge->v == u || p[ci]->edge->v == v ||
+                p[ci]->edge->ncr >= max_crossings)
                 continue;
-            }
 
             bool invalid = false;
             // dont cross edge twice
