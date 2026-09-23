@@ -228,11 +228,7 @@ namespace nested_cycle_build {
                         for (int f_v : v_faces) net.add_edge(f_v, sink, 1);
 
                         // check if at least 1 unit of flow exists from u to v
-                        if (net.flow(source, sink) < 1) {
-                            std::cout << "  [DEBUG Prune Fail] Edge (" << u << " -> " << v << ") failed flow check!" << std::endl;
-                            std::cout << "early prune not enough flow" << std::endl;
-                            return false;
-                        }
+                        if (net.flow(source, sink) < 1) return false;
                     }
 
                     return true;
