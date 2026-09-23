@@ -194,7 +194,6 @@ namespace nested_cycle_build {
 
                             for (;;) {
                                 ++total_local_iterations;
-                                std::size_t edge_idx = std::distance(local_edges.begin(), e);
                                 std::size_t u = (*e)[0];
                                 std::size_t v = (*e)[1];
 
@@ -210,12 +209,9 @@ BACKUP:
                                             goto FINISH_PASS;
                                         }
                                         --e;
-
-                                        edge_idx = std::distance(local_edges.begin(), e);
-                                        pcr = (constrained == 1 && e->size() == 3) ? (*e)[2] : 0;
-
                                         u = (*e)[0];
                                         v = (*e)[1];
+                                        pcr = (constrained == 1 && e->size() == 3) ? (*e)[2] : 0;
                                         p = d.edges.back().built;
                                         d.remove_edge();
 
