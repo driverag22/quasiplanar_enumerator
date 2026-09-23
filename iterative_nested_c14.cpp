@@ -34,6 +34,8 @@ int main() {
             {1,nm+4},{3,nm+6},{5,nm+8},{7,nm+10},{9,nm+12},{11,nm+0},{13,nm+2}
         };
     };
+    // at 25%, 50% and 75%
+    config.early_prune_checkpoints = {18,21,24}; // indices of local_edges_builder to check early prune
 
     // Instantiate and execute search
     NestedCycleSearcher<3> searcher(config);
@@ -46,6 +48,7 @@ int main() {
     std::cout << "Total Subdrawings Processed: " << result.total_processed << std::endl;
     std::cout << "Total Intermediate Subdrawings: " << result.solutions.size() << std::endl;
     std::cout << "Total Terminal Solutions Found: " << result.full_solution_count << std::endl;
+    std::cout << "Total Early Pruned Backtracks: "  << result.pruned_early_count << std::endl;
     std::cout << "Total Discarded Isomorphisms: " << result.discarded_count << std::endl;
     std::cout << "==================================================" << std::endl;
 

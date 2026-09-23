@@ -48,6 +48,37 @@ namespace nested_cycle_build {
     typedef std::vector<std::size_t> Edge;
     typedef std::vector<Edge> Edges;
 
+    template <std::size_t klim>
+    inline void check_and_terminate_if_invalid(const Drawing<klim>& d, const std::string& filename = "../quasiDrawings/failExample.graphml") {
+        // 1. Check for self-loops (u == v)
+        for (const auto& edge : d.edges) {
+            if (edge.u == edge.v) {
+                std::cout << "\n[INVALID DRAWING] Self-loop detected at vertex " << edge.u << "!" << std::endl;
+                std::ofstream of_graphml(filename);
+                d.graphml_output(of_graphml);
+                of_graphml.close();
+                std::cerr << "Saved invalid drawing to " << filename << ". Terminating execution." << std::endl;
+                std::exit(1);
+            }
+        }
+
+        // 2. Check for parallel edges (duplicate {u, v} pairs)
+        std::set<std::pair<std::size_t, std::size_t>> seen_edges;
+        for (const auto& edge : d.edges) {
+            std::size_t u = std::min(edge.u, edge.v);
+            std::size_t v = std::max(edge.u, edge.v);
+            if (seen_edges.count({u, v}) > 0) {
+                std::cout << "\n[INVALID DRAWING] Parallel edge detected between vertices " << u << " and " << v << "!" << std::endl;
+                std::ofstream of_graphml(filename);
+                d.graphml_output(of_graphml);
+                of_graphml.close();
+                std::cerr << "Saved invalid drawing to " << filename << ". Terminating execution." << std::endl;
+                std::exit(1);
+            }
+            seen_edges.insert({u, v});
+        }
+    }
+
     // Returns a halfedge pointing to the desired source vertex, and the number 
     // of crossings the edge should have in the reduced drawing.
     //
@@ -307,18 +338,23 @@ BACKUP:
                                         != config_.early_prune_checkpoints.end());
 
                                     if (is_checkpoint) {
-                                        if (!check_remaining_edges_reachability(d, local_edges, current_edge_idx + 1)) {
-                                            std::string filename2 = "../quasiDrawings/failExample.graphml";
-                                            // std::string filename2 = "../quasiDrawings/nested_c" + std::to_string(C) + "/" + std::to_string(idx) + "_iso.graphml";
-                                            std::ofstream of_graphml(filename2);
-                                            d.graphml_output(of_graphml);
-                                            of_graphml.close();
+                                        while (!check_remaining_edges_reachability(d, local_edges, current_edge_idx + 1)) {
+                                            // std::string filename2 = "../quasiDrawings/failExample.graphml";
+                                            // std::ofstream of_graphml(filename2);
+                                            // d.graphml_output(of_graphml);
+                                            // of_graphml.close();
+                                            // if (config_.verbose) {
+                                            //     std::cout << "  [Early Prune] Edge index " << current_edge_idx 
+                                            //         << ": Remaining edges cannot be routed. Early prune count: " << result.pruned_early_count << std::endl;
+                                            // }
                                             ++result.pruned_early_count;
-                                            if (config_.verbose) {
-                                                std::cout << "  [Early Prune] Edge index " << current_edge_idx 
-                                                    << ": Remaining edges cannot be routed. Early prune count: " << result.pruned_early_count << std::endl;
-                                            }
-                                            goto BACKUP;
+                                            p = d.edges.back().built; // edge e fails, remove and try alt paths
+                                            d.remove_edge();
+
+                                            // keep trying next path 
+                                            if (d.next_path(p, v, pcr)) d.add_edge(p, v, pcr);
+                                            // until no alternatie paths
+                                            else goto BACKUP;
                                         }
                                     }
                                 }
