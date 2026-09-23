@@ -6,7 +6,7 @@ typedef std::vector<std::size_t> Edge;
 typedef std::vector<Edge> Edges;
 
 const std::size_t klim = 3;
-const std::size_t C = 14;
+const std::size_t C = 12;
 const std::size_t n = 2 * C;
 
 int main() {
@@ -26,15 +26,13 @@ int main() {
         {8,9,  klim},
         {9,10, klim},
         {10,11,klim},
-        {11,12, klim},
-        {12,13, klim},
-        {13,0, klim},
+        {11,0, klim},
         // one matching
-        {0,C+11},
-        // outer cycle
-        {C+11,C+12,klim},
-        {C+12,C+13,klim},
-        {C+13,C   ,klim},
+        {0,C+9},
+        // outer uncrossed cycle
+        {C+9 ,C+10,klim},
+        {C+10,C+11,klim},
+        {C+11,C   ,klim},
         {C   ,C+1 ,klim},
         {C+1 ,C+2 ,klim},
         {C+2 ,C+3 ,klim},
@@ -44,13 +42,11 @@ int main() {
         {C+6 ,C+7 ,klim},
         {C+7 ,C+8 ,klim},
         {C+8 ,C+9 ,klim},
-        {C+9 ,C+10,klim},
-        {C+10,C+11,klim},
         // rest of matching
-        // EVEN: (i, C + ( (i+11) % 14)) == (i, C + ( (i-3) % 14))
-        // ODD: (i, C + ( (i+3) % 14)) == (i, C + ( (i-11) % 14))
-        {2,C+13},{4,C+1},{6,C+3},{8,C+5},{10,C+7},{12,C+9},
-        {1,C+4},{3,C+6},{5,C+8},{7,C+10},{9,C+12},{11,C+0},{13,C+2}
+        // EVEN: (i, C + ( (i+9) % 12)) == (i, C + ( (i-3) % 12))
+        // ODD: (i, C + ( (i+3) % 12)) == (i, C + ( (i-9) % 12))
+        {2,C+11},{4,C+1},{6,C+3},{8,C+5},{10,C+7},
+        {1,C+4},{3,C+6},{5,C+8},{7,C+10},{9,C},{11,C+2},
     };
     std::vector< Drawing<klim> > solutions;
     std::vector<std::size_t> d_cnt(100,1); // assume no more than 100 unique drawings up to iso

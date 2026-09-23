@@ -200,7 +200,7 @@ namespace nested_cycle_build {
 
                                 // In Pass 2 (constrained == 1), newly added C12 cycle edges (indices >= cycle_size)
                                 // are uncrossable (pcr = klim). In Pass 1, edges are unconstrained (pcr = 0).
-                                std::size_t pcr = (constrained == 1 && edge_idx >= config_.cycle_size) ? klim : 0;
+                                int pcr = (constrained == 1 && e->size() == 3) ? (*e)[2] : 0;
                                 HdsPath p = d.first_path(u, v, pcr);
 
                                 if (p.empty()) {
@@ -212,7 +212,7 @@ BACKUP:
                                         --e;
 
                                         edge_idx = std::distance(local_edges.begin(), e);
-                                        pcr = (constrained == 1 && edge_idx >= config_.cycle_size) ? klim : 0;
+                                        pcr = (constrained == 1 && e->size() == 3) ? (*e)[2] : 0;
 
                                         u = (*e)[0];
                                         v = (*e)[1];
