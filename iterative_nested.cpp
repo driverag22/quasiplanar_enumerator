@@ -6,7 +6,6 @@
 #include <iostream>
 #include <vector>
 #include <deque>
-#include <sstream>
 #include <fstream>
 #include <cassert>
 #include <nlohmann/json.hpp>
@@ -87,6 +86,10 @@ namespace nested_cycle_build {
                     std::string output_dir = "./output_drawings";
                     bool export_files = true;
                     bool verbose = true;
+                    bool enable_early_pruning = true;
+
+                    // custom edge index checkpoints where early flow checks run.
+                    std::vector<std::size_t> early_prune_checkpoints;
 
                     // Generator function for local edges added during extension step.
                     // Takes parent vertex offset (nm) and cycle size, returns vector of edges {u, v, [capacity]}.
@@ -99,6 +102,7 @@ namespace nested_cycle_build {
                     std::size_t discarded_count = 0;
                     std::size_t full_solution_count = 0;
                     std::size_t total_processed = 0;
+                    std::size_t pruned_early_count = 0;
                 };
 
                 // Constructors
@@ -129,15 +133,87 @@ namespace nested_cycle_build {
                     return d;
                 }
 
+                bool check_remaining_edges_reachability(
+                        const Drawing<klim>& d,
+                        const std::vector<Edge>& local_edges,
+                        std::size_t next_edge_index
+                        ) const {
+                    // map halfedges to face indices
+                    std::vector<int> face(d.halfedges.size(), -1);
+                    std::size_t num_faces = 0;
+                    for (auto i = d.halfedges.begin(); i != d.halfedges.end(); ++i) {
+                        if (face[i->label] != -1) continue;
+                        const HdsHalfedge* j = &*i;
+                        do { // walk around face
+                            face[j->label] = static_cast<int>(num_faces);
+                            j = j->next;
+                        } while (j->label != i->label);
+                        ++num_faces;
+                    }
+                    if (num_faces == 0) return false;
+
+                    // lambda to retrieve all incident face IDs for a given vertex label
+                    auto get_incident_faces = [&](std::size_t v_label) -> std::vector<int> {
+                        std::vector<int> faces;
+                        if (v_label >= d.vertices.size()) return faces;
+                        // halfedge pointing to v_label
+                        auto start_h = d.vertices[v_label].halfedge;
+                        if (!start_h) return faces;
+
+                        auto curr_h = start_h;
+                        do {
+                            int f = face[curr_h->label];
+                            // make sure face is valid and not already in faces
+                            if (f >= 0) if (std::find(faces.begin(), faces.end(), f) == faces.end())
+                                    faces.push_back(f);
+                            curr_h = curr_h->next->twin; // walk around halfedges incident to vertex
+                        } while (curr_h != start_h);
+                        return faces;
+                    };
+
+                    // test each remaining unplaced braid edge individually
+                    for (std::size_t rem_idx = next_edge_index; rem_idx < local_edges.size(); ++rem_idx) {
+                        std::size_t u = local_edges[rem_idx][0];
+                        std::size_t v = local_edges[rem_idx][1];
+                        std::vector<int> u_faces = get_incident_faces(u);
+                        std::vector<int> v_faces = get_incident_faces(v);
+
+                        // If an endpoint has no incident face, routing is impossible
+                        if (u_faces.empty() || v_faces.empty()) return false;
+
+                        // Node setup: 0..num_faces-1 (faces), source (num_faces), sink (num_faces+1)
+                        int source = static_cast<int>(num_faces); // vertex u
+                        int sink = static_cast<int>(num_faces + 1); // vertex v
+                        DualNetwork net(num_faces + 2);
+
+                        // Add dual graph face-to-face capacity edges
+                        for (auto i = d.halfedges.begin(); i != d.halfedges.end(); ++i) {
+                            int remaining_capacity = static_cast<int>(klim) - static_cast<int>(i->edge->ncr);
+                            if (remaining_capacity > 0) net.add_edge(face[i->label], face[i->twin->label], remaining_capacity);
+                        }
+
+                        // Connect source to faces incident to u, and faces incident to v to sink
+                        for (int f_u : u_faces) net.add_edge(source, f_u, 1);
+                        for (int f_v : v_faces) net.add_edge(f_v, sink, 1);
+
+                        // check if at least 1 unit of flow exists from u to v
+                        if (net.flow(source, sink) < 1) {
+                            std::cout << "  [DEBUG Prune Fail] Edge (" << u << " -> " << v << ") failed flow check!" << std::endl;
+                            std::cout << "early prune not enough flow" << std::endl;
+                            return false;
+                        }
+                    }
+
+                    return true;
+                }
+
 
                 SearchResult run() {
-                    if (!config_.local_edges_builder) {
+                    if (!config_.local_edges_builder)
                         throw std::runtime_error("NestedCycleSearcher Error: local_edges_builder callback is not set!");
-                    }
 
-                    if (config_.export_files) {
+                    if (config_.export_files)
                         std::filesystem::create_directories(config_.output_dir);
-                    }
 
 
                     SearchResult result;
@@ -197,8 +273,8 @@ namespace nested_cycle_build {
                                 std::size_t u = (*e)[0];
                                 std::size_t v = (*e)[1];
 
-                                // In Pass 2 (constrained == 1), newly added C12 cycle edges (indices >= cycle_size)
-                                // are uncrossable (pcr = klim). In Pass 1, edges are unconstrained (pcr = 0).
+                                // In Pass 2 (constrained == 1), newly added C12 cycle edges are uncrossable (pcr = klim). 
+                                // In Pass 1 (constrained == 0), edges are unconstrained (pcr = 0).
                                 int pcr = (constrained == 1 && e->size() == 3) ? (*e)[2] : 0;
                                 HdsPath p = d.first_path(u, v, pcr);
 
@@ -222,332 +298,34 @@ BACKUP:
                                 }
                                 d.add_edge(p, v, pcr);
 
+                                // reachability check for remaining unplaced braid edges
+                                std::size_t current_edge_idx = static_cast<std::size_t>(e - local_edges.begin());
+                                if (config_.enable_early_pruning && (current_edge_idx + 1 < local_edges.size())) {
+                                    bool is_checkpoint = false;
+                                    is_checkpoint = (
+                                        std::find(config_.early_prune_checkpoints.begin(),config_.early_prune_checkpoints.end(),current_edge_idx) 
+                                        != config_.early_prune_checkpoints.end());
+
+                                    if (is_checkpoint) {
+                                        if (!check_remaining_edges_reachability(d, local_edges, current_edge_idx + 1)) {
+                                            std::string filename2 = "../quasiDrawings/failExample.graphml";
+                                            // std::string filename2 = "../quasiDrawings/nested_c" + std::to_string(C) + "/" + std::to_string(idx) + "_iso.graphml";
+                                            std::ofstream of_graphml(filename2);
+                                            d.graphml_output(of_graphml);
+                                            of_graphml.close();
+                                            ++result.pruned_early_count;
+                                            if (config_.verbose) {
+                                                std::cout << "  [Early Prune] Edge index " << current_edge_idx 
+                                                    << ": Remaining edges cannot be routed. Early prune count: " << result.pruned_early_count << std::endl;
+                                            }
+                                            goto BACKUP;
+                                        }
+                                    }
+                                }
+
+
                                 if (++e == local_edges.end()) {
-                                    if (constrained == 0) {
-                                        // map halfedges to faces
-                                        std::vector<int> face(d.halfedges.size(), -1);
-                                        std::size_t num_faces = 0;
-                                        for (auto i = d.halfedges.begin(); i != d.halfedges.end(); ++i) {
-                                            if (face[i->label] != -1) continue;
-                                            const HdsHalfedge* j = &*i;
-                                            do {
-                                                face[j->label] = static_cast<int>(num_faces);
-                                                j = j->next;
-                                            } while (j->label != i->label);
-                                            ++num_faces;
-                                        }
-                                        if (num_faces == 0) goto BACKUP;
-
-                                        // Flow network vertex indexing:
-                                        //  - Faces: 0 ... num_faces - 1
-                                        //  - Active cycle vertices: num_faces ... num_faces + config_.cycle_size - 1
-                                        //  - Source node: num_faces + config_.cycle_size
-                                        std::size_t source = num_faces + config_.cycle_size;
-                                        DualNetwork net(source + 1);
-                                        std::vector<std::vector<std::size_t>> dualg(num_faces);
-
-                                        // source node to active cycle vertex
-                                        for (std::size_t i = 0; i < config_.cycle_size; ++i)
-                                            net.add_edge(source, num_faces + i, 1);
-
-                                        // edges between faces and from (active cycle) vertices to incident faces
-                                        std::size_t active_cycle_end = nm + config_.cycle_size;
-                                        for (auto i = d.halfedges.begin(); i != d.halfedges.end(); ++i) {
-                                            // active cycle vertex -> incident face
-                                            if (i->vertex->label >= nm && i->vertex->label < active_cycle_end)
-                                                net.add_edge(num_faces + (i->vertex->label - nm), face[i->label], 1);
-
-                                            // face -> adjacent face dual edge
-                                            int remaining_capacity = static_cast<int>(klim) - static_cast<int>(i->edge->ncr);
-                                            if (remaining_capacity > 0) {
-                                                net.add_edge(face[i->label], face[i->twin->label], remaining_capacity);
-                                                dualg[face[i->label]].push_back(face[i->twin->label]);
-                                            }
-                                        }
-
-                                        // Potential final faces
-                                        std::vector<int> pff;
-                                        for (std::size_t f = 0; f < num_faces; ++f) {
-                                            if (static_cast<std::size_t>(net.flow(static_cast<int>(source), static_cast<int>(f))) >= config_.cycle_size) {
-                                                pff.push_back(static_cast<int>(f));
-                                            }
-                                        }
-                                        if (pff.empty()) goto BACKUP;
-
-                                        // Face classification:
-                                        //   active = 3 -> possible final face (PFF)
-                                        //   active = 2 -> active face
-                                        //   active = 1 -> passive face
-                                        //   active = 0 -> transit face
-                                        //   active = -1 -> irrelevant face
-                                        std::vector<int> active(num_faces, -1);
-                                        for (int target_f : pff) active[target_f] = 3;
-
-                                        // Active faces: flow >= 3 to a PFF
-                                        for (std::size_t i = 0; i < num_faces; ++i) {
-                                            if (active[i] != -1) continue;
-                                            for (int target_f : pff) {
-                                                if (net.flow(i, target_f) >= 3) {
-                                                    active[i] = 2; break;
-                                                }
-                                            }
-                                        }
-
-                                        // Compute map: face -> representative boundary halfedge
-                                        std::vector<const HdsHalfedge*> fhedge(num_faces, nullptr);
-                                        for (auto i = d.halfedges.begin(); i != d.halfedges.end(); ++i) {
-                                            if (fhedge[face[i->label]] == nullptr) fhedge[face[i->label]] = &*i;
-                                        }
-
-                                        // Passive faces: incident to active cycle vertex v and (0,1,2)-step dual path to an active face/PFF
-                                        for (std::size_t i = 0; i < num_faces; ++i) {
-                                            if (fhedge[i] == nullptr) throw std::runtime_error("no edge for face");
-                                            if (active[i] != -1) continue;
-                                            const HdsHalfedge* e_curr = fhedge[i];
-                                            do {
-                                                std::size_t v = e_curr->vertex->label;
-                                                if (v >= nm && v < active_cycle_end) // active vertex
-                                                    for (const HdsHalfedge* f = e_curr->next->next; f != e_curr; f = f->next) {
-                                                        if (f->edge->ncr < klim &&
-                                                                f->vertex->label != v &&
-                                                                f->twin->vertex->label != v) 
-                                                        {
-                                                            int fn = face[f->twin->label];
-                                                            if (active[fn] >= 2) {active[i] = 1; break;}
-                                                            for (std::size_t neighbor_f : dualg[fn])
-                                                                if (active[neighbor_f] >= 2) {active[i] = 1; break;}
-                                                        }
-                                                    }
-
-                                                e_curr = e_curr->next;
-                                            } while (active[i] == -1 && e_curr != fhedge[i]);
-                                        }
-
-
-                                        // Transit faces: adjacent to one active and one (active||passive) face
-                                        for (std::size_t i = 0; i < num_faces; ++i) {
-                                            if (active[i] > 0) continue;
-                                            int an = 0, pn = 0; // active neighbor, passive neighbor count
-                                            for (std::size_t neighbor_f : dualg[i])
-                                                if (active[neighbor_f] >= 2) ++an;
-                                                else if (active[neighbor_f] == 1) ++pn;
-                                            if (an >= 2 || (an == 1 && pn >= 1))
-                                                active[i] = 0;
-                                        }
-
-                                        // determine relevant vertices
-                                        // ensure that the active cycle vertices offset, ..., offset+12-1, are mapped to 0...13 in relv
-                                        std::vector<const HdsHalfedge*> relv(config_.cycle_size, nullptr); // relevant halfedges
-                                        std::vector<const HdsHalfedge*> prelv; // possibly relevant halfedges
-
-                                        for (auto i = d.vertices.begin(); i != d.vertices.end(); ++i) {
-                                            auto e = i->halfedge;
-                                            std::size_t nirf = 0; // #incident relevant faces
-                                            auto a = e;
-                                            do {
-                                                if (active[face[e->label]] >= 0) { ++nirf; a = e; }
-                                                e = e->next->twin;
-                                            } while (e != i->halfedge);
-
-                                            if (i->label >= nm && i->label < active_cycle_end) {
-                                                // if no incident face is relevant, then 
-                                                // this isnt a valid solution
-                                                if (nirf == 0) goto BACKUP;
-                                                relv[(i->label) - nm] = a;
-                                            } else if (nirf >= 2)
-                                                relv.push_back(a);
-                                            else if (nirf == 1)
-                                                prelv.push_back(a);
-                                        }
-
-                                        // ... and crossings
-                                        for (auto i = d.crossings.begin(); i != d.crossings.end(); ++i) {
-                                            auto e = i->halfedge;
-                                            std::size_t nirf = 0;
-                                            auto a = e;
-                                            do {
-                                                if (active[face[e->label]] >= 0) { ++nirf; a = e; }
-                                                e = e->next->twin;
-                                            } while (e != i->halfedge);
-
-                                            if (nirf >= 2)
-                                                relv.push_back(a);
-                                            else if (nirf == 1)
-                                                prelv.push_back(a);
-                                        }
-
-                                        // make sure triangles are not contracted to (non-simple) lenses
-                                        std::vector<std::size_t> fsize(num_faces, 0); // size of relevant faces
-                                        std::size_t total_nv = d.vertices.size() + d.crossings.size();
-                                        std::vector<std::size_t> vact(total_nv, total_nv); // vertex mapping: old label -> new label
-                                        std::size_t vic = 0;
-
-                                        for (auto i = relv.begin(); i != relv.end(); ++i) {
-                                            auto j = *i;
-                                            do {
-                                                ++fsize[face[j->label]];
-                                                j = j->next->twin;
-                                            } while (j != *i);
-                                            vact[(*i)->vertex->label] = vic++;
-                                        }
-
-                                        for (auto i = prelv.begin(); i != prelv.end(); ++i)
-                                            if (fsize[face[(*i)->label]] < 3) { // if lense, add prelv halfedge
-                                                ++fsize[face[(*i)->label]];
-                                                relv.push_back(*i);
-                                                vact[(*i)->vertex->label] = vic++;
-                                            }
-
-                                        Drawing<klim> nd(relv.size() + 1); // extract relevant parts into pruned drawing
-                                        std::deque<const HdsHalfedge*> todo(1, relv[0]);
-                                        // vertex status: -1 == not considered yet, 0 == in queue and in nd, 
-                                        // 1 == handled and incident edges in nd
-                                        std::vector<int> done(d.vertices.size() + d.crossings.size(), -1);
-                                        // We merge connected regions of irrelevant faces into "black" regions. Record them here. 
-                                        std::vector<HdsHalfedge*> black;
-
-                                        while (!todo.empty()) {
-                                            auto i = todo.front();
-                                            todo.pop_front();
-                                            std::size_t u = i->vertex->label;
-
-                                            if (active[face[i->label]] < 0)
-                                                throw std::runtime_error("irrelevant face");
-
-                                            HdsHalfedge* last = nd.vertices[vact[u]].halfedge;
-                                            if (nd.edges.empty()) {
-                                                // first edge
-                                                auto p = prev_active<klim>(i, face, active, vact);
-                                                std::size_t v = p.first->vertex->label;
-                                                last = nd.add_first_edge(vact[u], vact[v], p.second)->twin;
-                                                if (last->vertex->label != 0)
-                                                    throw std::runtime_error("wrong first edge in new drawing");
-                                                todo.push_back(p.first);
-                                                done[v] = 0;
-                                            } else if (last == nullptr) {
-                                                todo.push_back(i);
-                                                continue;
-                                            }
-
-                                            // act[u] is now connected in nd and last points to act[u]; 
-                                            // we build neighborhood of act[u] in nd
-                                            done[u] = 1;
-                                            std::size_t wnd = last->twin->vertex->label; // neighbor of u in nd
-                                            std::size_t w = 0; // label of wnd in d
-                                            auto wi = i;
-                                            do {
-                                                auto e_prev = prev_active<klim>(wi, face, active, vact).first;
-                                                w = e_prev->vertex->label;
-                                                if (vact[w] == wnd) break;
-                                                wi = wi->next->twin;
-                                            } while (wi != i);
-                                            if (vact[w] != wnd) throw std::runtime_error("no w");
-
-                                            // edges incident to u in d
-                                            for (auto j = wi->next->twin; j != wi; j = j->next->twin) {
-                                                if (active[face[j->label]] < 0 && active[face[j->twin->label]] < 0)
-                                                    continue;
-
-                                                auto p = prev_active<klim>(j, face, active, vact);
-                                                std::size_t v = p.first->vertex->label;
-                                                if (last->next->vertex->label == vact[v]) {
-                                                    // edge uv already present
-                                                    last = last->next->twin;
-                                                    continue;
-                                                }
-
-                                                HdsPath path(2, last);
-                                                if (!nd.find_target(path, vact[v]))
-                                                    throw std::runtime_error("cannot find v");
-
-                                                auto ne = nd.add_edge(path, vact[v], p.second);
-                                                if (active[face[j->label]] < 0)
-                                                    black.push_back(ne->twin);
-                                                else if (active[face[j->twin->label]] < 0)
-                                                    black.push_back(ne);
-
-                                                last = last->next->twin;
-                                                if (done[v] < 0) {
-                                                    done[v] = 0;
-                                                    todo.push_back(p.first);
-                                                }
-                                            }
-                                        }
-
-                                        // process black faces
-                                        std::vector<bool> blackdone(nd.halfedges.size(), false);
-                                        std::vector<HdsHalfedge*> large_black_faces;
-
-                                        for (auto i = black.begin(); i != black.end(); ++i) {
-                                            if (blackdone[(*i)->label]) continue;
-                                            auto j = *i;
-                                            std::size_t bc = 0;
-                                            do {
-                                                blackdone[j->label] = true;
-                                                ++bc;
-                                                j = j->next;
-                                            } while (j != *i);
-
-                                            if (bc >= 4) large_black_faces.push_back(*i);
-                                        }
-                                        // allocate extra star vertices if more than one black face
-                                        if (large_black_faces.size() > 1)
-                                            nd.add_vertices(large_black_faces.size() - 1);
-
-                                        // add an uncrossable star in each (large) black face
-                                        std::size_t star_v = relv.size();
-                                        for (auto start_edge : large_black_faces) {
-                                            auto j = start_edge;
-                                            // add spoke to first boundary vertex
-                                            auto x = nd.add_edge(HdsPath({j, nullptr}), star_v, klim);
-                                            for (;;) {
-                                                j = j->next->twin->next; // jump over spoke
-                                                if (j == start_edge) break;
-                                                nd.add_edge(HdsPath({j, x}), star_v, klim);
-                                            }
-                                            ++star_v;
-                                        }
-
-
-                                        for (auto x = result.solutions.begin(); x != result.solutions.end(); ++x) {
-                                            if (are_isomorphic(x->drawing, nd)) {
-                                                if (config_.verbose) {
-                                                    std::cout << "--- Discard drawing #" << result.discarded_count
-                                                        << ", isomorphic to solution #"
-                                                        << (x - result.solutions.begin()) << std::endl;
-                                                }
-
-                                                // std::ofstream of;
-                                                // std::ostringstream filename;
-                                                // filename << "discard-" << discarded << ".graphml";
-                                                // of.open(filename.str());
-                                                // d.graphml_output(of);
-                                                // of.close();
-
-                                                ++result.discarded_count;
-                                                goto BACKUP;
-                                            }
-                                        }
-
-                                        // we have a new, valid solution -> record it
-                                        if (!nd.is_valid()) throw std::runtime_error("nd is invalid");
-                                        result.solutions.push_back({nd, current_depth+1});
-                                        is_extensible = true; // Mark as extensible to enable Pass 2
-                                        std::cout << "Drawing #" << result.solutions.size()-1 << ":\n"
-                                            << d << std::endl;
-
-                                        if (pff.size() > 1)
-                                            std::cout << "!!! Final face is not unique for this drawing ---"
-                                                << std::endl;
-
-                                        if (config_.verbose) {
-                                            std::cout << "[Pass 1] Added Intermediate Drawing #" << result.solutions.size() - 1 
-                                                << " to Queue." << std::endl;
-                                        }
-
-                                        goto BACKUP; 
-                                    } 
-                                    else {
+                                    if (constrained == 1)  {
                                         // =========================================================
                                         // PASS 2: CONSTRAINED COMPLETE DRAWING FOUND
                                         // =========================================================
@@ -570,18 +348,340 @@ BACKUP:
 
                                         ++result.full_solution_count;
                                         goto BACKUP;
-
                                     }
-                                }
-                            }
+
+                                    // map halfedges to faces
+                                    std::vector<int> face(d.halfedges.size(), -1);
+                                    std::size_t num_faces = 0;
+                                    for (auto i = d.halfedges.begin(); i != d.halfedges.end(); ++i) {
+                                        if (face[i->label] != -1) continue;
+                                        const HdsHalfedge* j = &*i;
+                                        do {
+                                            face[j->label] = static_cast<int>(num_faces);
+                                            j = j->next;
+                                        } while (j->label != i->label);
+                                        ++num_faces;
+                                    }
+                                    if (num_faces == 0) goto BACKUP;
+
+                                    // Flow network vertex indexing:
+                                    //  - Faces: 0 ... num_faces - 1
+                                    //  - Active cycle vertices: num_faces ... num_faces + config_.cycle_size - 1
+                                    //  - Source node: num_faces + config_.cycle_size
+                                    std::size_t source = num_faces + config_.cycle_size;
+                                    DualNetwork net(source + 1);
+                                    std::vector<std::vector<std::size_t>> dualg(num_faces);
+
+                                    // source node to active cycle vertex
+                                    for (std::size_t i = 0; i < config_.cycle_size; ++i)
+                                        net.add_edge(source, num_faces + i, 1);
+
+                                    // edges between faces and from (active cycle) vertices to incident faces
+                                    std::size_t active_cycle_end = nm + config_.cycle_size;
+                                    for (auto i = d.halfedges.begin(); i != d.halfedges.end(); ++i) {
+                                        // active cycle vertex -> incident face
+                                        if (i->vertex->label >= nm && i->vertex->label < active_cycle_end)
+                                            net.add_edge(num_faces + (i->vertex->label - nm), face[i->label], 1);
+
+                                        // face -> adjacent face dual edge
+                                        int remaining_capacity = static_cast<int>(klim) - static_cast<int>(i->edge->ncr);
+                                        if (remaining_capacity > 0) {
+                                            net.add_edge(face[i->label], face[i->twin->label], remaining_capacity);
+                                            dualg[face[i->label]].push_back(face[i->twin->label]);
+                                        }
+                                    }
+
+                                    // Potential final faces
+                                    std::vector<int> pff;
+                                    for (std::size_t f = 0; f < num_faces; ++f) {
+                                        if (static_cast<std::size_t>(net.flow(static_cast<int>(source), static_cast<int>(f))) >= config_.cycle_size) {
+                                            pff.push_back(static_cast<int>(f));
+                                        }
+                                    }
+                                    if (pff.empty()) goto BACKUP;
+
+                                    // Face classification:
+                                    //   active = 3 -> possible final face (PFF)
+                                    //   active = 2 -> active face
+                                    //   active = 1 -> passive face
+                                    //   active = 0 -> transit face
+                                    //   active = -1 -> irrelevant face
+                                    std::vector<int> active(num_faces, -1);
+                                    for (int target_f : pff) active[target_f] = 3;
+
+                                    // Active faces: flow >= 3 to a PFF
+                                    for (std::size_t i = 0; i < num_faces; ++i) {
+                                        if (active[i] != -1) continue;
+                                        for (int target_f : pff) {
+                                            if (net.flow(i, target_f) >= 3) {
+                                                active[i] = 2; break;
+                                            }
+                                        }
+                                    }
+
+                                    // Compute map: face -> representative boundary halfedge
+                                    std::vector<const HdsHalfedge*> fhedge(num_faces, nullptr);
+                                    for (auto i = d.halfedges.begin(); i != d.halfedges.end(); ++i) {
+                                        if (fhedge[face[i->label]] == nullptr) fhedge[face[i->label]] = &*i;
+                                    }
+
+                                    // Passive faces: incident to active cycle vertex v and (0,1,2)-step dual path to an active face/PFF
+                                    for (std::size_t i = 0; i < num_faces; ++i) {
+                                        if (fhedge[i] == nullptr) throw std::runtime_error("no edge for face");
+                                        if (active[i] != -1) continue;
+                                        const HdsHalfedge* e_curr = fhedge[i];
+                                        do {
+                                            std::size_t v = e_curr->vertex->label;
+                                            if (v >= nm && v < active_cycle_end) // active vertex
+                                                for (const HdsHalfedge* f = e_curr->next->next; f != e_curr; f = f->next) {
+                                                    if (f->edge->ncr < klim &&
+                                                            f->vertex->label != v &&
+                                                            f->twin->vertex->label != v) 
+                                                    {
+                                                        int fn = face[f->twin->label];
+                                                        if (active[fn] >= 2) {active[i] = 1; break;}
+                                                        for (std::size_t neighbor_f : dualg[fn])
+                                                            if (active[neighbor_f] >= 2) {active[i] = 1; break;}
+                                                    }
+                                                }
+
+                                            e_curr = e_curr->next;
+                                        } while (active[i] == -1 && e_curr != fhedge[i]);
+                                    }
+
+
+                                    // Transit faces: adjacent to one active and one (active||passive) face
+                                    for (std::size_t i = 0; i < num_faces; ++i) {
+                                        if (active[i] > 0) continue;
+                                        int an = 0, pn = 0; // active neighbor, passive neighbor count
+                                        for (std::size_t neighbor_f : dualg[i])
+                                            if (active[neighbor_f] >= 2) ++an;
+                                            else if (active[neighbor_f] == 1) ++pn;
+                                        if (an >= 2 || (an == 1 && pn >= 1))
+                                            active[i] = 0;
+                                    }
+
+                                    // determine relevant vertices
+                                    // ensure that the active cycle vertices offset, ..., offset+12-1, are mapped to 0...13 in relv
+                                    std::vector<const HdsHalfedge*> relv(config_.cycle_size, nullptr); // relevant halfedges
+                                    std::vector<const HdsHalfedge*> prelv; // possibly relevant halfedges
+
+                                    for (auto i = d.vertices.begin(); i != d.vertices.end(); ++i) {
+                                        auto e = i->halfedge;
+                                        std::size_t nirf = 0; // #incident relevant faces
+                                        auto a = e;
+                                        do {
+                                            if (active[face[e->label]] >= 0) { ++nirf; a = e; }
+                                            e = e->next->twin;
+                                        } while (e != i->halfedge);
+
+                                        if (i->label >= nm && i->label < active_cycle_end) {
+                                            // if no incident face is relevant, then 
+                                            // this isnt a valid solution
+                                            if (nirf == 0) goto BACKUP;
+                                            relv[(i->label) - nm] = a;
+                                        } else if (nirf >= 2)
+                                            relv.push_back(a);
+                                        else if (nirf == 1)
+                                            prelv.push_back(a);
+                                    }
+
+                                    // ... and crossings
+                                    for (auto i = d.crossings.begin(); i != d.crossings.end(); ++i) {
+                                        auto e = i->halfedge;
+                                        std::size_t nirf = 0;
+                                        auto a = e;
+                                        do {
+                                            if (active[face[e->label]] >= 0) { ++nirf; a = e; }
+                                            e = e->next->twin;
+                                        } while (e != i->halfedge);
+
+                                        if (nirf >= 2)
+                                            relv.push_back(a);
+                                        else if (nirf == 1)
+                                            prelv.push_back(a);
+                                    }
+
+                                    // make sure triangles are not contracted to (non-simple) lenses
+                                    std::vector<std::size_t> fsize(num_faces, 0); // size of relevant faces
+                                    std::size_t total_nv = d.vertices.size() + d.crossings.size();
+                                    std::vector<std::size_t> vact(total_nv, total_nv); // vertex mapping: old label -> new label
+                                    std::size_t vic = 0;
+
+                                    for (auto i = relv.begin(); i != relv.end(); ++i) {
+                                        auto j = *i;
+                                        do {
+                                            ++fsize[face[j->label]];
+                                            j = j->next->twin;
+                                        } while (j != *i);
+                                        vact[(*i)->vertex->label] = vic++;
+                                    }
+
+                                    for (auto i = prelv.begin(); i != prelv.end(); ++i)
+                                        if (fsize[face[(*i)->label]] < 3) { // if lense, add prelv halfedge
+                                            ++fsize[face[(*i)->label]];
+                                            relv.push_back(*i);
+                                            vact[(*i)->vertex->label] = vic++;
+                                        }
+
+                                    Drawing<klim> nd(relv.size() + 1); // extract relevant parts into pruned drawing
+                                    std::deque<const HdsHalfedge*> todo(1, relv[0]);
+                                    // vertex status: -1 == not considered yet, 0 == in queue and in nd, 
+                                    // 1 == handled and incident edges in nd
+                                    std::vector<int> done(d.vertices.size() + d.crossings.size(), -1);
+                                    // We merge connected regions of irrelevant faces into "black" regions. Record them here. 
+                                    std::vector<HdsHalfedge*> black;
+
+                                    while (!todo.empty()) {
+                                        auto i = todo.front();
+                                        todo.pop_front();
+                                        std::size_t u = i->vertex->label;
+
+                                        if (active[face[i->label]] < 0)
+                                            throw std::runtime_error("irrelevant face");
+
+                                        HdsHalfedge* last = nd.vertices[vact[u]].halfedge;
+                                        if (nd.edges.empty()) {
+                                            // first edge
+                                            auto p = prev_active<klim>(i, face, active, vact);
+                                            std::size_t v = p.first->vertex->label;
+                                            last = nd.add_first_edge(vact[u], vact[v], p.second)->twin;
+                                            if (last->vertex->label != 0)
+                                                throw std::runtime_error("wrong first edge in new drawing");
+                                            todo.push_back(p.first);
+                                            done[v] = 0;
+                                        } else if (last == nullptr) {
+                                            todo.push_back(i);
+                                            continue;
+                                        }
+
+                                        // act[u] is now connected in nd and last points to act[u]; 
+                                        // we build neighborhood of act[u] in nd
+                                        done[u] = 1;
+                                        std::size_t wnd = last->twin->vertex->label; // neighbor of u in nd
+                                        std::size_t w = 0; // label of wnd in d
+                                        auto wi = i;
+                                        do {
+                                            auto e_prev = prev_active<klim>(wi, face, active, vact).first;
+                                            w = e_prev->vertex->label;
+                                            if (vact[w] == wnd) break;
+                                            wi = wi->next->twin;
+                                        } while (wi != i);
+                                        if (vact[w] != wnd) throw std::runtime_error("no w");
+
+                                        // edges incident to u in d
+                                        for (auto j = wi->next->twin; j != wi; j = j->next->twin) {
+                                            if (active[face[j->label]] < 0 && active[face[j->twin->label]] < 0)
+                                                continue;
+
+                                            auto p = prev_active<klim>(j, face, active, vact);
+                                            std::size_t v = p.first->vertex->label;
+                                            if (last->next->vertex->label == vact[v]) {
+                                                // edge uv already present
+                                                last = last->next->twin;
+                                                continue;
+                                            }
+
+                                            HdsPath path(2, last);
+                                            if (!nd.find_target(path, vact[v]))
+                                                throw std::runtime_error("cannot find v");
+
+                                            auto ne = nd.add_edge(path, vact[v], p.second);
+                                            if (active[face[j->label]] < 0)
+                                                black.push_back(ne->twin);
+                                            else if (active[face[j->twin->label]] < 0)
+                                                black.push_back(ne);
+
+                                            last = last->next->twin;
+                                            if (done[v] < 0) {
+                                                done[v] = 0;
+                                                todo.push_back(p.first);
+                                            }
+                                        }
+                                    }
+
+                                    // process black faces
+                                    std::vector<bool> blackdone(nd.halfedges.size(), false);
+                                    std::vector<HdsHalfedge*> large_black_faces;
+
+                                    for (auto i = black.begin(); i != black.end(); ++i) {
+                                        if (blackdone[(*i)->label]) continue;
+                                        auto j = *i;
+                                        std::size_t bc = 0;
+                                        do {
+                                            blackdone[j->label] = true;
+                                            ++bc;
+                                            j = j->next;
+                                        } while (j != *i);
+
+                                        if (bc >= 4) large_black_faces.push_back(*i);
+                                    }
+                                    // allocate extra star vertices if more than one black face
+                                    if (large_black_faces.size() > 1)
+                                        nd.add_vertices(large_black_faces.size() - 1);
+
+                                    // add an uncrossable star in each (large) black face
+                                    std::size_t star_v = relv.size();
+                                    for (auto start_edge : large_black_faces) {
+                                        auto j = start_edge;
+                                        // add spoke to first boundary vertex
+                                        auto x = nd.add_edge(HdsPath({j, nullptr}), star_v, klim);
+                                        for (;;) {
+                                            j = j->next->twin->next; // jump over spoke
+                                            if (j == start_edge) break;
+                                            nd.add_edge(HdsPath({j, x}), star_v, klim);
+                                        }
+                                        ++star_v;
+                                    }
+
+
+                                    for (auto x = result.solutions.begin(); x != result.solutions.end(); ++x) {
+                                        if (are_isomorphic(x->drawing, nd)) {
+                                            if (config_.verbose) {
+                                                std::cout << "--- Discard drawing #" << result.discarded_count
+                                                    << ", isomorphic to solution #"
+                                                    << (x - result.solutions.begin()) << std::endl;
+                                            }
+
+                                            // std::ofstream of;
+                                            // std::ostringstream filename;
+                                            // filename << "discard-" << discarded << ".graphml";
+                                            // of.open(filename.str());
+                                            // d.graphml_output(of);
+                                            // of.close();
+
+                                            ++result.discarded_count;
+                                            goto BACKUP;
+                                        }
+                                    }
+
+                                    // we have a new, valid solution -> record it
+                                    if (!nd.is_valid()) throw std::runtime_error("nd is invalid");
+                                    result.solutions.push_back({nd, current_depth+1});
+                                    is_extensible = true; // Mark as extensible to enable Pass 2
+                                    std::cout << "Drawing #" << result.solutions.size()-1 << ":\n"
+                                        << d << std::endl;
+
+                                    if (pff.size() > 1)
+                                        std::cout << "!!! Final face is not unique for this drawing ---"
+                                            << std::endl;
+
+                                    if (config_.verbose) {
+                                        std::cout << "[Pass 1] Added Intermediate Drawing #" << result.solutions.size() - 1 
+                                            << " to Queue." << std::endl;
+                                    }
+
+                                    goto BACKUP; 
+                                } // if (++e == local_edges.end())
+                            } // for (auto e = edges.begin();;)
 
 FINISH_PASS:
                             std::cout << "Finished Pass " << (constrained == 0 ? "1" : "2") 
                                 << " for Drawing #" << solcount 
                                 << " (Total DFS Iterations: " << total_local_iterations << ")" << std::endl;
-                        }
+                        } // for (int constrained = 0; constrained < 2; constrained++)
                         ++solcount;
-                    }
+                    } // while (solcount < solutions.size())
 
                     result.total_processed = solcount;
                     return result;
