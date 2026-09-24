@@ -183,6 +183,19 @@ namespace nested_cycle_build {
                     }
                     if (num_faces == 0) return false;
 
+                    // dual adjacency list filtered by available crossing capacity (capacity > 0)
+                    std::vector<std::vector<int>> dual_adj(num_faces);
+                    for (auto i = d.halfedges.begin(); i != d.halfedges.end(); ++i) {
+                        int remaining_capacity = static_cast<int>(klim) - static_cast<int>(i->edge->ncr);
+                        if (remaining_capacity > 0) {
+                            int f1 = face[i->label];
+                            int f2 = face[i->twin->label];
+                            if (f1 >= 0 && f2 >= 0 && f1 != f2) {
+                                dual_adj[f1].push_back(f2);
+                            }
+                        }
+                    }
+
                     // lambda to retrieve all incident face IDs for a given vertex label
                     auto get_incident_faces = [&](std::size_t v_label) -> std::vector<int> {
                         std::vector<int> faces;
@@ -202,7 +215,11 @@ namespace nested_cycle_build {
                         return faces;
                     };
 
-                    // test each remaining unplaced braid edge individually
+                    // test each remaining unplaced braid edge individually using BFS
+                    // we use the same "visited" array for each edge, by using a different 
+                    // token (rem_idx) each time
+                    std::vector<int> visited_token(num_faces, -1);
+                    std::queue<int> Q;
                     for (std::size_t rem_idx = next_edge_index; rem_idx < local_edges.size(); ++rem_idx) {
                         std::size_t u = local_edges[rem_idx][0];
                         std::size_t v = local_edges[rem_idx][1];
@@ -212,23 +229,47 @@ namespace nested_cycle_build {
                         // If an endpoint has no incident face, routing is impossible
                         if (u_faces.empty() || v_faces.empty()) return false;
 
-                        // Node setup: 0..num_faces-1 (faces), source (num_faces), sink (num_faces+1)
-                        int source = static_cast<int>(num_faces); // vertex u
-                        int sink = static_cast<int>(num_faces + 1); // vertex v
-                        DualNetwork net(num_faces + 2);
+                        // quick target lookup mask for sink faces (v_faces)
+                        std::vector<bool> is_target(num_faces, false);
+                        for (int f_v : v_faces) 
+                            is_target[f_v] = true;
 
-                        // Add dual graph face-to-face capacity edges
-                        for (auto i = d.halfedges.begin(); i != d.halfedges.end(); ++i) {
-                            int remaining_capacity = static_cast<int>(klim) - static_cast<int>(i->edge->ncr);
-                            if (remaining_capacity > 0) net.add_edge(face[i->label], face[i->twin->label], remaining_capacity);
+                        // initialize queue with source
+                        while (!Q.empty()) Q.pop();
+                        int current_marker = static_cast<int>(rem_idx);
+                        bool shares_face = false;
+
+                        // set starting faces of BFS
+                        for (int f_u : u_faces) {
+                            if (is_target[f_u]) {
+                                shares_face = true;
+                                break;
+                            }
+                            visited_token[f_u] = current_marker;
+                            Q.push(f_u);
                         }
 
-                        // Connect source to faces incident to u, and faces incident to v to sink
-                        for (int f_u : u_faces) net.add_edge(source, f_u, 1);
-                        for (int f_v : v_faces) net.add_edge(f_v, sink, 1);
+                        // Vertices u and v already share a common face -> reachable with 0 crossings
+                        if (shares_face) continue;
 
-                        // check if at least 1 unit of flow exists from u to v
-                        if (net.flow(source, sink) < 1) return false;
+                        bool reachable = false;
+                        while (!Q.empty()) {
+                            int curr = Q.front();
+                            Q.pop();
+
+                            for (int neighbor : dual_adj[curr]) {
+                                if (is_target[neighbor]) {
+                                    reachable = true;
+                                    break;
+                                }
+                                if (visited_token[neighbor] != current_marker) {
+                                    visited_token[neighbor] = current_marker;
+                                    Q.push(neighbor);
+                                }
+                            }
+                            if (reachable) break;
+                        }
+                        if (!reachable) return false;
                     }
 
                     return true;
