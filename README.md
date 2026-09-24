@@ -6,7 +6,7 @@ Based on the code from "On maximal 3-planar graphs" by Michael Hoffmann, Meghana
 and $k$-planar graphs (for arbitrary $k\geq0$).
 
  - The file `hds_kplanar.h` contains the code to enumerate $k$-planar graphs for any choice of $k\geq 0$ (generalization of code from paper, which works for $k \leq 3$).
- - The file `hds_quasiplanar.h` contains the code to enumerate quasiplanar graphs with local crossing number $0\leq k\geq0$ (parameter).
+ - The file `hds_quasiplanar.h` contains the code to enumerate quasiplanar graphs with local crossing number $0\leq k\leq0$ (parameter).
 
 The local crossing number (`klim`) controls the depth of the recurrence: the higher `klim` the more branching the algorithm do.
 
