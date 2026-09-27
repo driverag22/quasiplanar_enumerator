@@ -11,7 +11,7 @@ typedef std::vector<Edge> Edges;
 
 const std::size_t n = 12;      // Total vertices
 const std::size_t klim = 17;   // 2n - 7 = 17
-const std::string split = "E";
+const std::string split = "12_subsetD";
 
 struct EdgeSetWithMissing {
     Edges edges;
@@ -21,36 +21,61 @@ struct EdgeSetWithMissing {
 std::vector<EdgeSetWithMissing> generate_edge_sets() {
     std::vector<EdgeSetWithMissing> all_edge_sets;
 
-    Edges base_v2_edges;
-    for (std::size_t u = 6; u < 12; ++u) for (std::size_t v = u + 1; v < 12; ++v)
-        base_v2_edges.push_back({u, v});
-
     std::vector<std::pair<std::size_t, std::size_t>> v1_v2_matching;
     for (std::size_t u = 0; u < 6; ++u) v1_v2_matching.push_back({u, 6 + u});
 
     for (std::size_t l = 0; l < 6; ++l) {
         for (std::size_t r = l+1; r < 6; ++r) {
             EdgeSetWithMissing item;
-            item.edges = base_v2_edges;
-            for (std::size_t u = 0; u < 6; ++u) {
-                for (std::size_t v = 6; v < 12; ++v) {
-                    if (v == u + 6) continue;
-                    if (u == r && v == (l+6))
-                        continue;
-                    if (u == l && v == (r+6))
-                        continue;
+
+            // V2 edges {6..11}, excluding (l+6,r+6)
+            for (std::size_t u = 6; u < 12; ++u) {
+                for (std::size_t v = u + 1; v < 12; ++v) {
+                    if (u == l + 6 && v == r + 6) continue;
                     item.edges.push_back({u, v});
                 }
             }
-            // item.missing_edges = v1_v2_matching;
-            // item.missing_edges.push_back({l,r+6});
-            // item.missing_edges.push_back({r,l+6});
+
+            // V1 to V2 edges, excluding...
+            for (std::size_t u = 0; u < 6; ++u) {
+                for (std::size_t v = 6; v < 12; ++v) {
+                    if (v == u + 6) continue;
+                    if (u == r && v == l + 6) continue;
+                    if (u == l && v == r + 6) continue;
+                    item.edges.push_back({u, v});
+                }
+            }
+            item.missing_edges = v1_v2_matching;
+            item.missing_edges.push_back({l, r + 6});
+            item.missing_edges.push_back({r, l + 6});
+            item.missing_edges.push_back({l + 6, r + 6});
 
             std::sort(item.edges.begin(), item.edges.end());
             all_edge_sets.push_back(item);
         }
     }
     return all_edge_sets;
+}
+
+bool is_drawing_extendable(const Drawing<klim>& d, 
+        const std::vector<std::pair<std::size_t, std::size_t>>& missingEdges) {
+    for (const auto& [u, v] : missingEdges) {
+        Drawing<klim> d_search(d);
+        HdsPath p = d_search.first_path(u, v);
+
+        while (!p.empty()) {
+            Drawing<klim> d_test(d);
+            d_test.add_edge(p, v);
+            if (d_test.verify_quasiplanarity()) {
+                std::cout << "\n  [!] Edge (" << u << ", " << v << ") can be legally added!";
+                return true;
+            } else {
+                std::cout << "not quasi!\n";
+            }
+            if (!d_search.next_path(p, v)) break;
+        }
+    }
+    return false;
 }
 
 int main() {
@@ -61,7 +86,7 @@ int main() {
     std::size_t total_edge_sets = all_edge_sets.size();
     std::cout << "Generated " << total_edge_sets << " edge set configurations." << std::endl;
 
-    // Iterate through all drawings of K_5
+    // Iterate through all drawings of K_6
     int idx = 0;
     const std::chrono::duration<double> timePerIter = std::chrono::duration<double>(3600);
     for (const auto& item : all_edge_sets) {
@@ -119,6 +144,10 @@ int main() {
                 if (++e == current_edges.end()) {
                     std::cout << "\nFound solution for drawing " << i << "!" << std::endl;
                     if (!d.verify_quasiplanarity()) std::cout << "not quasi?\n";
+                    if (is_drawing_extendable(d, item.missing_edges)) {
+                        std::cout << "extendable\n";
+                        return 0;
+                    }
                     goto NEXT_ITEM;
                 }
             }
