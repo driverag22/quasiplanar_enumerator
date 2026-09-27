@@ -4,14 +4,13 @@
 #include <algorithm>
 #include <iostream>
 #include <cassert>
-#include <chrono>
 
 typedef std::vector<std::size_t> Edge;
 typedef std::vector<Edge> Edges;
 
 const std::size_t n = 12;      // Total vertices
 const std::size_t klim = 17;   // 2n - 7 = 17
-const std::string split = "subgraph_c_bothBlocks";
+const std::string split = "subgraph_c_6_to_9_block";
 
 struct EdgeSetWithMissing {
     Edges edges;
@@ -28,14 +27,14 @@ std::vector<EdgeSetWithMissing> generate_edge_sets() {
     }
 
     // c chosen from {0..5} whose edge (c, 6) is omitted.
-    for (std::size_t c = 0; c < 6; ++c) {
+    // for (std::size_t c = 0; c < 6; ++c) {
         EdgeSetWithMissing item;
 
         // add edges among the first 10 vertices {0..9}
         for (std::size_t u = 0; u < 10; ++u) {
             for (std::size_t v = u + 1; v < 10; ++v) {
                 if (u < 6 && v < 6) continue; // skip base K6 edges
-                if (u == c && v == 6) continue; // skip (c, 6)
+                if (u == 6 && v == 7) continue; // skip (6,7)
                 item.edges.push_back({u, v});
             }
         }
@@ -46,11 +45,11 @@ std::vector<EdgeSetWithMissing> generate_edge_sets() {
         }
 
         item.missing_edges = fixed_missing_edges;
-        item.missing_edges.push_back({c, 6});
+        item.missing_edges.push_back({6, 7});
 
         std::sort(item.edges.begin(), item.edges.end());
         all_edge_sets.push_back(item);
-    }
+    // }
     return all_edge_sets;
 }
 
