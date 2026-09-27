@@ -10,7 +10,7 @@ typedef std::vector<Edge> Edges;
 
 const std::size_t n = 12;      // Total vertices
 const std::size_t klim = 17;   // 2n - 7 = 17
-const std::string split = "subgraph_c_6_to_9_block";
+const std::string split = "subgraph_c_0_to_5_block";
 
 struct EdgeSetWithMissing {
     Edges edges;
@@ -19,37 +19,58 @@ struct EdgeSetWithMissing {
 
 std::vector<EdgeSetWithMissing> generate_edge_sets() {
     std::vector<EdgeSetWithMissing> all_edge_sets;
+    for (std::size_t c = 0; c < 6; ++c) {
+        std::vector<std::size_t> S; // S = {0..5} \ {c}
+        for (std::size_t u = 0; u < 6; ++u)
+            if (u != c) S.push_back(u);
 
-    // fixed missing edges
-    std::vector<std::pair<std::size_t, std::size_t>> fixed_missing_edges;
-    for (std::size_t u = 6; u < 10; ++u) {
-        fixed_missing_edges.push_back({u, 10}); fixed_missing_edges.push_back({u, 11});
+        // iterate over non-neighbor (nn) of c in S
+        for (std::size_t nn : S) {
+            EdgeSetWithMissing item;
+
+            // edges inside {6..9}
+            for (std::size_t u = 6; u < 10; ++u) {
+                for (std::size_t v = u + 1; v < 10; ++v) {
+                    item.edges.push_back({u, v});
+                }
+            }
+            // connections from {6..9} to new 10 (old c)
+            for (std::size_t u = 6; u < 10; ++u)
+                item.edges.push_back({u, 10});
+
+            // connections from {6..9} to S
+            for (std::size_t u = 6; u < 10; ++u)
+                for (std::size_t s : S)
+                    item.edges.push_back({s, u});
+
+            // connections from new 10 (old c) to S \ {nn}
+            for (std::size_t s : S) if (s != nn) 
+                    item.edges.push_back({s, 10});
+
+            // connection between c (old 10) and new 10
+            item.edges.push_back({c, 10});
+
+            // connections for 11: connects to all of S and new 10
+            for (std::size_t s : S) item.edges.push_back({s, 11});
+            item.edges.push_back({10, 11});
+
+            std::sort(item.edges.begin(), item.edges.end());
+
+            // edge (nn, 10) omitted between new 10 and non-neighbor nn
+            item.missing_edges.push_back({nn, 10});
+
+            // edge (c, 11) omitted between old 10 (now c) and 11
+            item.missing_edges.push_back({c, 11});
+
+            // edges between {6..9} and, c (old 10) and 11
+            for (std::size_t u = 6; u < 10; ++u) {
+                item.missing_edges.push_back({c, u}); item.missing_edges.push_back({u, 11});
+            }
+
+            all_edge_sets.push_back(item);
+        }
     }
 
-    // c chosen from {0..5} whose edge (c, 6) is omitted.
-    // for (std::size_t c = 0; c < 6; ++c) {
-        EdgeSetWithMissing item;
-
-        // add edges among the first 10 vertices {0..9}
-        for (std::size_t u = 0; u < 10; ++u) {
-            for (std::size_t v = u + 1; v < 10; ++v) {
-                if (u < 6 && v < 6) continue; // skip base K6 edges
-                if (u == 6 && v == 7) continue; // skip (6,7)
-                item.edges.push_back({u, v});
-            }
-        }
-
-        // connect vertices 10 and 11 to all vertices in {0..5}
-        for (std::size_t u = 0; u < 6; ++u) {
-            item.edges.push_back({u, 10}); item.edges.push_back({u, 11});
-        }
-
-        item.missing_edges = fixed_missing_edges;
-        item.missing_edges.push_back({6, 7});
-
-        std::sort(item.edges.begin(), item.edges.end());
-        all_edge_sets.push_back(item);
-    // }
     return all_edge_sets;
 }
 
