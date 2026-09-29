@@ -237,6 +237,7 @@ namespace nested_cycle_build {
                         std::size_t path_count = 0;
                         std::fill(in_path.begin(), in_path.end(), false);
 
+                        // perform dfs for each edge independently, determine number of ways to draw it
                         auto dfs_path_count = [&](auto& self, int curr_face, std::size_t depth) -> void {
                             if (path_count > 3) return;
                             if (is_target[curr_face]) {
@@ -244,14 +245,12 @@ namespace nested_cycle_build {
                                 return;
                             }
                             if (depth >= klim) return;
-
                             in_path[curr_face] = true;
-                            for (int neighbor : dual_adj[curr_face]) {
+                            for (int neighbor : dual_adj[curr_face])
                                 if (!in_path[neighbor]) {
                                     self(self, neighbor, depth + 1);
                                     if (path_count > 3) break;
                                 }
-                            }
                             in_path[curr_face] = false;
                         };
 
@@ -261,12 +260,11 @@ namespace nested_cycle_build {
                         }
 
                         if (path_count == 0) return false;
-                        if (path_count <= 2) std::cout << "useful\n";
 
                         rem_edges_with_counts.push_back({path_count, local_edges[rem_idx]});
                     }
 
-                    // Stably sort remaining edges: edges with fewer paths (1, 2, 3) are prioritized first.
+                    // stably sort remaining edges: edges with fewer paths (1, 2, 3) are prioritized first.
                     // Edges with >3 paths maintain their original order at the end.
                     std::stable_sort(
                         rem_edges_with_counts.begin(),
