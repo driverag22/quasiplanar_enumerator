@@ -201,7 +201,7 @@ namespace nested_cycle_build {
                         if (v_label >= d.vertices.size()) return faces;
                         // halfedge pointing to v_label
                         auto start_h = d.vertices[v_label].halfedge;
-                        if (!start_h) return faces; // assume both endpoints of the edge already in the drawing
+                        if (!start_h) return faces;
 
                         auto curr_h = start_h;
                         do {
@@ -215,9 +215,10 @@ namespace nested_cycle_build {
                     };
 
                     // test each remaining unplaced braid edge individually using BFS
-                    // we use the same "visited" array for each edge, by using a different 
-                    // token (rem_idx) each time
-                    std::vector<int> visited_token(num_faces, -1);
+                    // we use the same "visited" and "target" arrays for each edge, 
+                    // by using a different token (rem_idx) each time
+                    std::vector<std::size_t> visited_token(num_faces, -1);
+                    std::vector<std::size_t> is_target(num_faces, -1);
                     std::vector<int> dist(num_faces, -1);
                     std::queue<int> Q;
                     for (std::size_t rem_idx = next_edge_index; rem_idx < local_edges.size(); ++rem_idx) {
@@ -226,21 +227,19 @@ namespace nested_cycle_build {
                         std::vector<int> u_faces = get_incident_faces(u);
                         std::vector<int> v_faces = get_incident_faces(v);
 
-                        // If an endpoint has no incident face, routing is impossible
+                        // assume both endpoints of the edge already in the drawing
                         if (u_faces.empty() || v_faces.empty()) return false;
 
                         // quick target lookup mask for sink faces (v_faces)
-                        std::vector<bool> is_target(num_faces, false);
                         for (int f_v : v_faces) 
-                            is_target[f_v] = true;
+                            is_target[f_v] = rem_idx;
 
                         // initialize queue with source
                         while (!Q.empty()) Q.pop();
                         bool shares_face = false;
-
                         // set starting faces of BFS
                         for (int f_u : u_faces) {
-                            if (is_target[f_u]) {
+                            if (is_target[f_u] == rem_idx) {
                                 shares_face = true;
                                 break;
                             }
@@ -260,28 +259,22 @@ namespace nested_cycle_build {
 
                             int d_curr = dist[curr];
 
-                            if (is_target[curr]) {
+                            if (is_target[curr] == rem_idx) {
                                 min_edge_crossings = static_cast<std::size_t>(d_curr);
                                 break;
                             }
 
                             for (int neighbor : dual_adj[curr]) {
                                 if (visited_token[neighbor] != rem_idx) {
+                                    visited_token[neighbor] = rem_idx;
                                     dist[neighbor] = d_curr + 1;
                                     Q.push(neighbor);
                                 }
                             }
                         }
-                        if (min_edge_crossings == std::numeric_limits<std::size_t>::max()) {
-                            // std::cout << "no path found\n";
+                        if (min_edge_crossings == std::numeric_limits<std::size_t>::max() || min_edge_crossings > klim)
                             return false;
-                        }
-                        if (min_edge_crossings > klim) {
-                            // std::cout << "too many crossings for path! \n";
-                            return false;
-                        }
                     }
-
                     return true;
                 }
 
