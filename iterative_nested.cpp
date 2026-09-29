@@ -143,18 +143,18 @@ namespace nested_cycle_build {
 
                 Drawing<klim> create_base_drawing() const {
                     std::size_t cycle_size = config_.cycle_size;
-                    // 12 vertices for C12_1 + 1 dummy star vertex = 15 vertices
+                    // cycle_size vertices for C_{cycle_size} + 1 dummy star vertex = cycle_size+1 vertices
                     Drawing<klim> d(cycle_size + 1);
                     std::vector<HdsHalfedge*> cycle(cycle_size, nullptr);
 
-                    // build uncrossable C12 cycle by setting ncr=klim=3
+                    // build uncrossable C_{cycle_size} cycle by setting ncr=klim=3
                     cycle[1] = d.add_first_edge(0, 1, klim);
                     for (std::size_t i = 2; i < cycle_size; ++i) {
                         cycle[i] = d.add_edge(HdsPath({cycle[i - 1], nullptr}), i, klim);
                     }
                     cycle[0] = d.add_edge(HdsPath({cycle[cycle_size - 1], cycle[1]->twin}), 0, klim);
 
-                    // block one side of the cycle using an uncrossable star at dummy vertex 12
+                    // block one side of the cycle using an uncrossable star at dummy vertex cycle_size
                     std::size_t star_center = cycle_size;
                     auto e = d.add_edge(HdsPath({cycle[0], nullptr}), star_center, klim);
                     for (std::size_t i = cycle_size - 1; i > 0; --i) {
@@ -166,7 +166,7 @@ namespace nested_cycle_build {
 
                 bool check_remaining_edges_reachability(
                         const Drawing<klim>& d,
-                        const std::vector<Edge>& local_edges,
+                        std::vector<Edge>& local_edges,
                         std::size_t next_edge_index
                         ) const {
                     // map halfedges to face indices
@@ -214,67 +214,72 @@ namespace nested_cycle_build {
                         return faces;
                     };
 
-                    // test each remaining unplaced braid edge individually using BFS
-                    // we use the same "visited" and "target" arrays for each edge, 
-                    // by using a different token (rem_idx) each time
-                    std::vector<std::size_t> visited_token(num_faces, -1);
-                    std::vector<std::size_t> is_target(num_faces, -1);
-                    std::vector<int> dist(num_faces, -1);
-                    std::queue<int> Q;
+                    
+                    std::vector<std::pair<std::size_t, Edge>> rem_edges_with_counts;
+                    rem_edges_with_counts.reserve(local_edges.size() - next_edge_index);
+
+                    std::vector<bool> is_target(num_faces, false);
+                    std::vector<bool> in_path(num_faces, false);
+
                     for (std::size_t rem_idx = next_edge_index; rem_idx < local_edges.size(); ++rem_idx) {
                         std::size_t u = local_edges[rem_idx][0];
                         std::size_t v = local_edges[rem_idx][1];
                         std::vector<int> u_faces = get_incident_faces(u);
                         std::vector<int> v_faces = get_incident_faces(v);
 
-                        // assume both endpoints of the edge already in the drawing
                         if (u_faces.empty() || v_faces.empty()) return false;
 
-                        // quick target lookup mask for sink faces (v_faces)
-                        for (int f_v : v_faces) 
-                            is_target[f_v] = rem_idx;
-
-                        // initialize queue with source
-                        while (!Q.empty()) Q.pop();
-                        bool shares_face = false;
-                        // set starting faces of BFS
-                        for (int f_u : u_faces) {
-                            if (is_target[f_u] == rem_idx) {
-                                shares_face = true;
-                                break;
-                            }
-                            visited_token[f_u] = rem_idx;
-                            dist[f_u] = 0;
-                            Q.push(f_u);
+                        std::fill(is_target.begin(), is_target.end(), false);
+                        for (int f_v : v_faces) {
+                            is_target[f_v] = true;
                         }
 
-                        // Vertices u and v already share a common face -> reachable with 0 crossings
-                        if (shares_face) continue;
+                        std::size_t path_count = 0;
+                        std::fill(in_path.begin(), in_path.end(), false);
 
-                        std::size_t min_edge_crossings = std::numeric_limits<std::size_t>::max();
-
-                        while (!Q.empty()) {
-                            int curr = Q.front();
-                            Q.pop();
-
-                            int d_curr = dist[curr];
-
-                            if (is_target[curr] == rem_idx) {
-                                min_edge_crossings = static_cast<std::size_t>(d_curr);
-                                break;
+                        auto dfs_path_count = [&](auto& self, int curr_face, std::size_t depth) -> void {
+                            if (path_count > 3) return;
+                            if (is_target[curr_face]) {
+                                path_count++;
+                                return;
                             }
+                            if (depth >= klim) return;
 
-                            for (int neighbor : dual_adj[curr]) {
-                                if (visited_token[neighbor] != rem_idx) {
-                                    visited_token[neighbor] = rem_idx;
-                                    dist[neighbor] = d_curr + 1;
-                                    Q.push(neighbor);
+                            in_path[curr_face] = true;
+                            for (int neighbor : dual_adj[curr_face]) {
+                                if (!in_path[neighbor]) {
+                                    self(self, neighbor, depth + 1);
+                                    if (path_count > 3) break;
                                 }
                             }
+                            in_path[curr_face] = false;
+                        };
+
+                        for (int f_u : u_faces) {
+                            dfs_path_count(dfs_path_count, f_u, 0);
+                            if (path_count > 3) break;
                         }
-                        if (min_edge_crossings == std::numeric_limits<std::size_t>::max() || min_edge_crossings > klim)
-                            return false;
+
+                        if (path_count == 0) return false;
+                        if (path_count <= 2) std::cout << "useful\n";
+
+                        rem_edges_with_counts.push_back({path_count, local_edges[rem_idx]});
                     }
+
+                    // Stably sort remaining edges: edges with fewer paths (1, 2, 3) are prioritized first.
+                    // Edges with >3 paths maintain their original order at the end.
+                    std::stable_sort(
+                        rem_edges_with_counts.begin(),
+                        rem_edges_with_counts.end(),
+                        [](const auto& a, const auto& b) {
+                            return a.first < b.first;
+                        }
+                    );
+
+                    for (std::size_t i = 0; i < rem_edges_with_counts.size(); ++i) {
+                        local_edges[next_edge_index + i] = rem_edges_with_counts[i].second;
+                    }
+
                     return true;
                 }
 
