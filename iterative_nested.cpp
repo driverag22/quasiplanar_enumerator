@@ -190,9 +190,8 @@ namespace nested_cycle_build {
                         if (remaining_capacity > 0) {
                             int f1 = face[i->label];
                             int f2 = face[i->twin->label];
-                            if (f1 >= 0 && f2 >= 0 && f1 != f2) {
+                            if (f1 >= 0 && f2 >= 0 && f1 != f2)
                                 dual_adj[f1].push_back(f2);
-                            }
                         }
                     }
 
@@ -202,14 +201,14 @@ namespace nested_cycle_build {
                         if (v_label >= d.vertices.size()) return faces;
                         // halfedge pointing to v_label
                         auto start_h = d.vertices[v_label].halfedge;
-                        if (!start_h) return faces;
+                        if (!start_h) return faces; // assume both endpoints of the edge already in the drawing
 
                         auto curr_h = start_h;
                         do {
                             int f = face[curr_h->label];
                             // make sure face is valid and not already in faces
                             if (f >= 0) if (std::find(faces.begin(), faces.end(), f) == faces.end())
-                                    faces.push_back(f);
+                                faces.push_back(f);
                             curr_h = curr_h->next->twin; // walk around halfedges incident to vertex
                         } while (curr_h != start_h);
                         return faces;
@@ -219,6 +218,7 @@ namespace nested_cycle_build {
                     // we use the same "visited" array for each edge, by using a different 
                     // token (rem_idx) each time
                     std::vector<int> visited_token(num_faces, -1);
+                    std::vector<int> dist(num_faces, -1);
                     std::queue<int> Q;
                     for (std::size_t rem_idx = next_edge_index; rem_idx < local_edges.size(); ++rem_idx) {
                         std::size_t u = local_edges[rem_idx][0];
@@ -236,7 +236,6 @@ namespace nested_cycle_build {
 
                         // initialize queue with source
                         while (!Q.empty()) Q.pop();
-                        int current_marker = static_cast<int>(rem_idx);
                         bool shares_face = false;
 
                         // set starting faces of BFS
@@ -245,31 +244,42 @@ namespace nested_cycle_build {
                                 shares_face = true;
                                 break;
                             }
-                            visited_token[f_u] = current_marker;
+                            visited_token[f_u] = rem_idx;
+                            dist[f_u] = 0;
                             Q.push(f_u);
                         }
 
                         // Vertices u and v already share a common face -> reachable with 0 crossings
                         if (shares_face) continue;
 
-                        bool reachable = false;
+                        std::size_t min_edge_crossings = std::numeric_limits<std::size_t>::max();
+
                         while (!Q.empty()) {
                             int curr = Q.front();
                             Q.pop();
 
+                            int d_curr = dist[curr];
+
+                            if (is_target[curr]) {
+                                min_edge_crossings = static_cast<std::size_t>(d_curr);
+                                break;
+                            }
+
                             for (int neighbor : dual_adj[curr]) {
-                                if (is_target[neighbor]) {
-                                    reachable = true;
-                                    break;
-                                }
-                                if (visited_token[neighbor] != current_marker) {
-                                    visited_token[neighbor] = current_marker;
+                                if (visited_token[neighbor] != rem_idx) {
+                                    dist[neighbor] = d_curr + 1;
                                     Q.push(neighbor);
                                 }
                             }
-                            if (reachable) break;
                         }
-                        if (!reachable) return false;
+                        if (min_edge_crossings == std::numeric_limits<std::size_t>::max()) {
+                            // std::cout << "no path found\n";
+                            return false;
+                        }
+                        if (min_edge_crossings > klim) {
+                            // std::cout << "too many crossings for path! \n";
+                            return false;
+                        }
                     }
 
                     return true;
