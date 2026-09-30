@@ -254,9 +254,6 @@ namespace nested_cycle_build {
                         // isolated endpoint: can be placed in any face, drop commodity
                         if (u_faces.empty() || v_faces.empty()) continue;
 
-                        std::size_t pcr = (constrained == 1 && le.size() == 3) ? le[2] : 0;
-                        std::size_t budget = (pcr >= klim) ? 0 : klim - pcr;
-
                         std::fill(is_target.begin(), is_target.end(), 0);
                         for (int f : v_faces) is_target[f] = 1;
                         bool free_edge = false;
@@ -270,7 +267,7 @@ namespace nested_cycle_build {
                         std::vector<McfPath> cp;
                         bool overflow = false;
                         auto dfs = [&](auto& self, int f, std::size_t depth) -> void {
-                            if (depth >= budget) return;
+                            if (depth >= klim) return;
                             for (const auto& [nb, e] : dual[f]) {
                                 if (overflow) return;
                                 if (in_path[nb]) continue;
@@ -367,17 +364,19 @@ namespace nested_cycle_build {
                     std::size_t num_faces = label_faces(d, face);
                     if (num_faces == 0) return false;
 
-                    // dual adjacency list filtered by available crossing capacity (capacity > 0)
-                    std::vector<std::vector<int>> dual_adj(num_faces);
+                    // dual adjacency list filtered by available crossing capacity (capacity > 0):
+                    // face -> (adjacent face, crossed edge)
+                    std::vector<std::vector<std::pair<int, const HdsEdge*>>> dual_adj(num_faces);
                     for (auto i = d.halfedges.begin(); i != d.halfedges.end(); ++i) {
                         int remaining_capacity = static_cast<int>(klim) - static_cast<int>(i->edge->ncr);
                         if (remaining_capacity > 0) {
                             int f1 = face[i->label];
                             int f2 = face[i->twin->label];
                             if (f1 >= 0 && f2 >= 0 && f1 != f2)
-                                dual_adj[f1].push_back(f2);
+                                dual_adj[f1].push_back({f2, i->edge});
                         }
                     }
+                    std::vector<std::size_t> crossed; // labels of edges crossed on the current dfs path
 
                     std::vector<std::pair<std::size_t, Edge>> rem_edges_with_counts;
                     rem_edges_with_counts.reserve(local_edges.size() - next_edge_index);
@@ -391,12 +390,11 @@ namespace nested_cycle_build {
                         std::vector<int> u_faces = incident_faces(d, face, u);
                         std::vector<int> v_faces = incident_faces(d, face, v);
 
+                        // PRE: no isolated endpoints at a checkpoint; fail safe instead of dropping the edge
                         if (u_faces.empty() || v_faces.empty()) return false;
 
                         std::fill(is_target.begin(), is_target.end(), false);
-                        for (int f_v : v_faces) {
-                            is_target[f_v] = true;
-                        }
+                        for (int f_v : v_faces) is_target[f_v] = true;
 
                         std::size_t path_count = 0;
                         std::fill(in_path.begin(), in_path.end(), false);
@@ -410,11 +408,17 @@ namespace nested_cycle_build {
                             }
                             if (depth >= klim) return;
                             in_path[curr_face] = true;
-                            for (int neighbor : dual_adj[curr_face])
-                                if (!in_path[neighbor]) {
-                                    self(self, neighbor, depth + 1);
-                                    if (path_count > 3) break;
-                                }
+                            for (const auto& [neighbor, ce] : dual_adj[curr_face]) {
+                                if (in_path[neighbor]) continue;
+                                // same restrictions as Drawing::find_crossing: no crossing of edges
+                                // sharing an endpoint with uv, no crossing the same edge twice
+                                if (ce->u == u || ce->v == u || ce->u == v || ce->v == v) continue;
+                                if (std::find(crossed.begin(), crossed.end(), ce->label) != crossed.end()) continue;
+                                crossed.push_back(ce->label);
+                                self(self, neighbor, depth + 1);
+                                crossed.pop_back();
+                                if (path_count > 3) break;
+                            }
                             in_path[curr_face] = false;
                         };
 
