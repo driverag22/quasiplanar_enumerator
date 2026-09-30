@@ -49,6 +49,9 @@ int main() {
     std::cout << "Total Intermediate Subdrawings: " << result.solutions.size() << std::endl;
     std::cout << "Total Terminal Solutions Found: " << result.full_solution_count << std::endl;
     std::cout << "Total Early Pruned Backtracks: "  << result.pruned_early_count << std::endl;
+    std::cout << "  of which by MCF check: " << result.pruned_mcf_count
+              << " (budget exhausted: " << result.mcf_unknown_count
+              << ", time: " << result.mcf_seconds << "s)" << std::endl;
     std::cout << "Total Discarded Isomorphisms: " << result.discarded_count << std::endl;
     std::cout << "==================================================" << std::endl;
 

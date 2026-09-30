@@ -8,6 +8,8 @@
 #include <deque>
 #include <fstream>
 #include <cassert>
+#include <algorithm>
+#include <chrono>
 #include <nlohmann/json.hpp>
 
 // BGL Flow
@@ -119,6 +121,12 @@ namespace nested_cycle_build {
                     bool verbose = true;
                     bool enable_early_pruning = true;
 
+                    // integral multicommodity flow check at the early prune checkpoints
+                    bool enable_mcf_pruning = true;
+                    std::size_t mcf_node_budget = 200000; // backtracking nodes before giving up (no prune)
+                    std::size_t mcf_max_paths = 4096;     // commodities with more candidate paths are dropped
+                    bool mcf_log_progress = true;         // periodically print running MCF prune count
+
                     // custom edge index checkpoints where early flow checks run.
                     std::vector<std::size_t> early_prune_checkpoints;
 
@@ -134,7 +142,12 @@ namespace nested_cycle_build {
                     std::size_t full_solution_count = 0;
                     std::size_t total_processed = 0;
                     std::size_t pruned_early_count = 0;
+                    std::size_t pruned_mcf_count = 0;   // subset of pruned_early_count caused by the MCF check
+                    std::size_t mcf_unknown_count = 0;  // MCF checks that hit the node budget
+                    double mcf_seconds = 0;             // total time spent in MCF checks
                 };
+
+                enum class McfResult { Feasible, Infeasible, Unknown };
 
                 // Constructors
                 NestedCycleSearcher() = default;
@@ -164,13 +177,9 @@ namespace nested_cycle_build {
                     return d;
                 }
 
-                bool check_remaining_edges_reachability(
-                        const Drawing<klim>& d,
-                        std::vector<Edge>& local_edges,
-                        std::size_t next_edge_index
-                        ) const {
-                    // map halfedges to face indices
-                    std::vector<int> face(d.halfedges.size(), -1);
+                // map halfedges to face indices, returns number of faces
+                static std::size_t label_faces(const Drawing<klim>& d, std::vector<int>& face) {
+                    face.assign(d.halfedges.size(), -1);
                     std::size_t num_faces = 0;
                     for (auto i = d.halfedges.begin(); i != d.halfedges.end(); ++i) {
                         if (face[i->label] != -1) continue;
@@ -181,6 +190,181 @@ namespace nested_cycle_build {
                         } while (j->label != i->label);
                         ++num_faces;
                     }
+                    return num_faces;
+                }
+
+                // all face IDs incident to a vertex (empty if the vertex is isolated)
+                static std::vector<int> incident_faces(
+                        const Drawing<klim>& d,
+                        const std::vector<int>& face,
+                        std::size_t v_label) {
+                    std::vector<int> faces;
+                    if (v_label >= d.vertices.size()) return faces;
+                    // halfedge pointing to v_label
+                    auto start_h = d.vertices[v_label].halfedge;
+                    if (!start_h) return faces;
+
+                    auto curr_h = start_h;
+                    do {
+                        int f = face[curr_h->label];
+                        // make sure face is valid and not already in faces
+                        if (f >= 0) if (std::find(faces.begin(), faces.end(), f) == faces.end())
+                            faces.push_back(f);
+                        curr_h = curr_h->next->twin; // walk around halfedges incident to vertex
+                    } while (curr_h != start_h);
+                    return faces;
+                }
+
+                // Integral multicommodity flow relaxation for the remaining edges: every remaining edge
+                // (commodity) picks one sequence of crossed drawn edges, such that no drawn edge exceeds
+                // its remaining capacity klim - ncr. Crossings among the remaining edges are ignored, so
+                // Infeasible is a proof that no completion exists. Unknown means the node budget was hit.
+                McfResult check_remaining_edges_mcf(
+                        const Drawing<klim>& d,
+                        const std::vector<Edge>& local_edges,
+                        std::size_t next_edge_index,
+                        int constrained
+                        ) const {
+                    std::vector<int> face;
+                    std::size_t num_faces = label_faces(d, face);
+                    if (num_faces == 0) return McfResult::Unknown;
+
+                    // remaining crossing capacity per drawn edge (edge labels are 0 ... edges.size()-1)
+                    std::vector<int> cap(d.edges.size(), 0);
+                    for (const auto& e : d.edges) cap[e.label] = static_cast<int>(klim) - static_cast<int>(e.ncr);
+
+                    // dual graph: face -> (adjacent face, crossed edge)
+                    std::vector<std::vector<std::pair<int, const HdsEdge*>>> dual(num_faces);
+                    for (const auto& h : d.halfedges) {
+                        if (h.edge->ncr >= klim) continue;
+                        int f1 = face[h.label], f2 = face[h.twin->label];
+                        if (f1 != f2) dual[f1].push_back({f2, h.edge});
+                    }
+
+                    typedef std::vector<std::size_t> McfPath; // sorted labels of crossed edges
+                    std::vector<std::vector<McfPath>> paths;  // candidate paths per commodity
+                    std::vector<char> is_target(num_faces), in_path(num_faces);
+                    McfPath cur;
+
+                    for (std::size_t rem_idx = next_edge_index; rem_idx < local_edges.size(); ++rem_idx) {
+                        const Edge& le = local_edges[rem_idx];
+                        std::size_t u = le[0], v = le[1];
+                        std::vector<int> u_faces = incident_faces(d, face, u);
+                        std::vector<int> v_faces = incident_faces(d, face, v);
+                        // isolated endpoint: can be placed in any face, drop commodity
+                        if (u_faces.empty() || v_faces.empty()) continue;
+
+                        std::size_t pcr = (constrained == 1 && le.size() == 3) ? le[2] : 0;
+                        std::size_t budget = (pcr >= klim) ? 0 : klim - pcr;
+
+                        std::fill(is_target.begin(), is_target.end(), 0);
+                        for (int f : v_faces) is_target[f] = 1;
+                        bool free_edge = false;
+                        for (int f : u_faces) if (is_target[f]) free_edge = true;
+                        if (free_edge) continue; // uncrossed drawing possible, uses no capacity
+
+                        // paths through another face of u are dominated by starting there
+                        std::fill(in_path.begin(), in_path.end(), 0);
+                        for (int f : u_faces) in_path[f] = 1;
+
+                        std::vector<McfPath> cp;
+                        bool overflow = false;
+                        auto dfs = [&](auto& self, int f, std::size_t depth) -> void {
+                            if (depth >= budget) return;
+                            for (const auto& [nb, e] : dual[f]) {
+                                if (overflow) return;
+                                if (in_path[nb]) continue;
+                                // same restrictions as Drawing::find_crossing
+                                if (e->u == u || e->v == u || e->u == v || e->v == v) continue;
+                                if (std::find(cur.begin(), cur.end(), e->label) != cur.end()) continue;
+                                cur.push_back(e->label);
+                                if (is_target[nb]) {
+                                    // stop here: any extension is a dominated superset
+                                    cp.push_back(cur);
+                                    std::sort(cp.back().begin(), cp.back().end());
+                                    if (cp.size() > config_.mcf_max_paths) overflow = true;
+                                } else {
+                                    in_path[nb] = 1;
+                                    self(self, nb, depth + 1);
+                                    in_path[nb] = 0;
+                                }
+                                cur.pop_back();
+                            }
+                        };
+                        for (int f : u_faces) {
+                            cur.clear();
+                            dfs(dfs, f, 0);
+                            if (overflow) break;
+                        }
+
+                        if (overflow) continue; // too many options, drop commodity
+                        if (cp.empty()) return McfResult::Infeasible;
+
+                        // dedupe and remove dominated (superset) paths
+                        std::sort(cp.begin(), cp.end(), [](const McfPath& a, const McfPath& b) {
+                            return a.size() != b.size() ? a.size() < b.size() : a < b;
+                        });
+                        cp.erase(std::unique(cp.begin(), cp.end()), cp.end());
+                        std::vector<McfPath> kept;
+                        for (const auto& p : cp) {
+                            bool dominated = false;
+                            for (const auto& q : kept) {
+                                if (q.size() >= p.size()) break; // kept is ordered by size
+                                if (std::includes(p.begin(), p.end(), q.begin(), q.end())) { dominated = true; break; }
+                            }
+                            if (!dominated) kept.push_back(p);
+                        }
+                        paths.push_back(std::move(kept));
+                    }
+
+                    // backtracking with minimum-remaining-values commodity selection
+                    const std::size_t nc = paths.size();
+                    std::vector<char> assigned(nc, 0);
+                    std::size_t nodes = 0;
+                    bool aborted = false;
+                    auto fits = [&](const McfPath& p) {
+                        for (std::size_t l : p) if (cap[l] <= 0) return false;
+                        return true;
+                    };
+                    auto solve = [&](auto& self, std::size_t remaining) -> bool {
+                        if (remaining == 0) return true;
+                        if (++nodes > config_.mcf_node_budget) { aborted = true; return false; }
+
+                        std::size_t best = nc, best_cnt = SIZE_MAX;
+                        for (std::size_t i = 0; i < nc; ++i) {
+                            if (assigned[i]) continue;
+                            std::size_t cnt = 0;
+                            for (const auto& p : paths[i]) {
+                                if (fits(p)) ++cnt;
+                                if (cnt >= best_cnt) break;
+                            }
+                            if (cnt == 0) return false;
+                            if (cnt < best_cnt) { best_cnt = cnt; best = i; }
+                        }
+
+                        assigned[best] = 1;
+                        for (const auto& p : paths[best]) {
+                            if (!fits(p)) continue;
+                            for (std::size_t l : p) --cap[l];
+                            if (self(self, remaining - 1)) return true;
+                            for (std::size_t l : p) ++cap[l];
+                            if (aborted) return false;
+                        }
+                        assigned[best] = 0;
+                        return false;
+                    };
+
+                    if (solve(solve, nc)) return McfResult::Feasible;
+                    return aborted ? McfResult::Unknown : McfResult::Infeasible;
+                }
+
+                bool check_remaining_edges_reachability(
+                        const Drawing<klim>& d,
+                        std::vector<Edge>& local_edges,
+                        std::size_t next_edge_index
+                        ) const {
+                    std::vector<int> face;
+                    std::size_t num_faces = label_faces(d, face);
                     if (num_faces == 0) return false;
 
                     // dual adjacency list filtered by available crossing capacity (capacity > 0)
@@ -195,26 +379,6 @@ namespace nested_cycle_build {
                         }
                     }
 
-                    // lambda to retrieve all incident face IDs for a given vertex label
-                    auto get_incident_faces = [&](std::size_t v_label) -> std::vector<int> {
-                        std::vector<int> faces;
-                        if (v_label >= d.vertices.size()) return faces;
-                        // halfedge pointing to v_label
-                        auto start_h = d.vertices[v_label].halfedge;
-                        if (!start_h) return faces;
-
-                        auto curr_h = start_h;
-                        do {
-                            int f = face[curr_h->label];
-                            // make sure face is valid and not already in faces
-                            if (f >= 0) if (std::find(faces.begin(), faces.end(), f) == faces.end())
-                                faces.push_back(f);
-                            curr_h = curr_h->next->twin; // walk around halfedges incident to vertex
-                        } while (curr_h != start_h);
-                        return faces;
-                    };
-
-                    
                     std::vector<std::pair<std::size_t, Edge>> rem_edges_with_counts;
                     rem_edges_with_counts.reserve(local_edges.size() - next_edge_index);
 
@@ -224,8 +388,8 @@ namespace nested_cycle_build {
                     for (std::size_t rem_idx = next_edge_index; rem_idx < local_edges.size(); ++rem_idx) {
                         std::size_t u = local_edges[rem_idx][0];
                         std::size_t v = local_edges[rem_idx][1];
-                        std::vector<int> u_faces = get_incident_faces(u);
-                        std::vector<int> v_faces = get_incident_faces(v);
+                        std::vector<int> u_faces = incident_faces(d, face, u);
+                        std::vector<int> v_faces = incident_faces(d, face, v);
 
                         if (u_faces.empty() || v_faces.empty()) return false;
 
@@ -292,6 +456,7 @@ namespace nested_cycle_build {
 
                     SearchResult result;
                     result.solutions.push_back({create_base_drawing(), 0});
+                    auto last_mcf_log = std::chrono::steady_clock::now();
 
                     // we process the solutions in order, this is the current one we process
                     std::size_t solcount = 0;
@@ -381,7 +546,30 @@ BACKUP:
                                         != config_.early_prune_checkpoints.end());
 
                                     if (is_checkpoint) {
-                                        while (!check_remaining_edges_reachability(d, local_edges, current_edge_idx + 1)) {
+                                        // joint routing check, only run if every edge is individually reachable
+                                        auto mcf_prunes = [&]() -> bool {
+                                            if (!config_.enable_mcf_pruning) return false;
+                                            auto t0 = std::chrono::steady_clock::now();
+                                            McfResult r = check_remaining_edges_mcf(d, local_edges, current_edge_idx + 1, constrained);
+                                            result.mcf_seconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+                                            if (r == McfResult::Unknown) ++result.mcf_unknown_count;
+                                            if (r == McfResult::Infeasible) ++result.pruned_mcf_count;
+
+                                            // throttled progress log (at most every 0.5s)
+                                            if (config_.mcf_log_progress && t0 - last_mcf_log >= std::chrono::milliseconds(500)) {
+                                                last_mcf_log = t0;
+                                                std::cout << "  [MCF] drawing #" << solcount
+                                                    << " pass " << (constrained + 1)
+                                                    << " checkpoint " << current_edge_idx
+                                                    << ": pruned " << result.pruned_mcf_count
+                                                    << " / early pruned " << result.pruned_early_count
+                                                    << ", budget exhausted " << result.mcf_unknown_count
+                                                    << ", mcf time " << result.mcf_seconds << "s" << std::endl;
+                                            }
+                                            return r == McfResult::Infeasible;
+                                        };
+
+                                        while (!check_remaining_edges_reachability(d, local_edges, current_edge_idx + 1) || mcf_prunes()) {
                                             // std::string filename2 = "../quasiDrawings/failExample.graphml";
                                             // std::ofstream of_graphml(filename2);
                                             // d.graphml_output(of_graphml);
@@ -430,17 +618,8 @@ BACKUP:
                                     }
 
                                     // map halfedges to faces
-                                    std::vector<int> face(d.halfedges.size(), -1);
-                                    std::size_t num_faces = 0;
-                                    for (auto i = d.halfedges.begin(); i != d.halfedges.end(); ++i) {
-                                        if (face[i->label] != -1) continue;
-                                        const HdsHalfedge* j = &*i;
-                                        do {
-                                            face[j->label] = static_cast<int>(num_faces);
-                                            j = j->next;
-                                        } while (j->label != i->label);
-                                        ++num_faces;
-                                    }
+                                    std::vector<int> face;
+                                    std::size_t num_faces = label_faces(d, face);
                                     if (num_faces == 0) goto BACKUP;
 
                                     // Flow network vertex indexing:
@@ -757,7 +936,8 @@ BACKUP:
 FINISH_PASS:
                             std::cout << "Finished Pass " << (constrained == 0 ? "1" : "2") 
                                 << " for Drawing #" << solcount 
-                                << " (Total DFS Iterations: " << total_local_iterations << ")" << std::endl;
+                                << " (Total DFS Iterations: " << total_local_iterations
+                                << ", MCF pruned so far: " << result.pruned_mcf_count << ")" << std::endl;
                         } // for (int constrained = 0; constrained < 2; constrained++)
                         ++solcount;
                     } // while (solcount < solutions.size())
