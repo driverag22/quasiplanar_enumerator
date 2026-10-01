@@ -4,6 +4,9 @@
 #include <algorithm>
 #include <iostream>
 #include <cassert>
+#include <random>
+#include <numeric>
+#include <cstdlib>
 
 typedef std::vector<std::size_t> Edge;
 typedef std::vector<Edge> Edges;
@@ -74,6 +77,12 @@ std::vector<EdgeSetWithMissing> generate_edge_sets() {
     return all_edge_sets;
 }
 
+// Randomly reorder a vector in place so runs don't always start with the same element
+template <typename T>
+void shuffle_order(std::vector<T>& items, std::mt19937& rng) {
+    std::shuffle(items.begin(), items.end(), rng);
+}
+
 bool is_drawing_extensible(const Drawing<klim>& d, 
         const std::vector<std::pair<std::size_t, std::size_t>>& missingEdges) {
     for (const auto& [u, v] : missingEdges) {
@@ -95,17 +104,27 @@ bool is_drawing_extensible(const Drawing<klim>& d,
     return false;
 }
 
-int main() {
+int main(int argc, char** argv) {
     std::cout << "\n\n ===================================================== \n";
     std::cout << "max candidate, k = " << klim << ", n = " << n << ", (proper) split = " << split << std::endl;
 
+    // seed can be passed as first argument to reproduce a run
+    unsigned seed = argc > 1 ? std::strtoul(argv[1], nullptr, 10) : std::random_device{}();
+    std::mt19937 rng(seed);
+    std::cout << "Random seed: " << seed << std::endl;
+
     std::vector<EdgeSetWithMissing> all_edge_sets = generate_edge_sets();
+    shuffle_order(all_edge_sets, rng);
     std::size_t total_edge_sets = all_edge_sets.size();
     std::cout << "Generated " << total_edge_sets << " edge set configurations." << std::endl;
 
     // Iterate through all drawings of K_6
+    std::vector<int> drawing_order(63);
+    std::iota(drawing_order.begin(), drawing_order.end(), 0);  // 0..62
+    shuffle_order(drawing_order, rng);
+
     int idx = 0;
-    for (int i = 0; i < 63; i++) {
+    for (int i : drawing_order) {
         std::cout << "Drawing " << std::to_string(i) << std::endl;
         for (const auto& item : all_edge_sets) {
             idx++;
