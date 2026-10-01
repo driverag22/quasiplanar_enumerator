@@ -47,7 +47,6 @@ int main() {
     std::cout << "\n\n ===================================================== \n";
     std::cout << "k = " << klim << ", n = " << n << std::endl;
     assert(edges.size() == 168);
-    // const Edges edges = generateCompleteGraph(n);
     std::vector< Drawing<klim> > solutions;
     std::vector<std::size_t> d_cnt(10000,1); // assume no more than 10000 unique drawings up to iso
 
@@ -98,7 +97,7 @@ BACKUP:
         }
     }
 END:
-    std::cout << "Found " << solutions.size() << " min crossing drawings in total." << std::endl;
+    std::cout << "Found " << solutions.size() << " drawings in total." << std::endl;
     if(solutions.size() == 0) {
         return 0;
     }
@@ -117,9 +116,6 @@ END:
         of_graphml.close();
         idx++;
     }
-
-    std::cout << "Found " << counter << " drawings in total." << std::endl;
-    std::cout << "Found " << solutions.size() << " unique drawings in total." << std::endl;
 
     for (std::size_t i = 0; i < solutions.size(); i++)
         std::cout << "Drawing-" << i << " has " << d_cnt[i] << " isomorphic drawings" << std::endl;

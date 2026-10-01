@@ -6,7 +6,7 @@ typedef std::vector<std::size_t> Edge;
 typedef std::vector<Edge> Edges;
 
 const std::size_t klim = 3;
-const std::size_t C = 12;
+const std::size_t C = 10;
 const std::size_t n = 2 * C;
 
 int main() {
@@ -24,15 +24,13 @@ int main() {
         {6,7,  klim},
         {7,8,  klim},
         {8,9,  klim},
-        {9,10, klim},
-        {10,11,klim},
-        {11,0, klim},
+        {9,0, klim},
         // one matching
-        {0,C+9},
+        {0,C+7},
         // outer uncrossed cycle
-        {C+9 ,C+10,klim},
-        {C+10,C+11,klim},
-        {C+11,C   ,klim},
+        {C+7 ,C+8,klim},
+        {C+8,C+9,klim},
+        {C+9,C   ,klim},
         {C   ,C+1 ,klim},
         {C+1 ,C+2 ,klim},
         {C+2 ,C+3 ,klim},
@@ -40,13 +38,11 @@ int main() {
         {C+4 ,C+5 ,klim},
         {C+5 ,C+6 ,klim},
         {C+6 ,C+7 ,klim},
-        {C+7 ,C+8 ,klim},
-        {C+8 ,C+9 ,klim},
         // rest of matching
-        // EVEN: (i, C + ( (i+9) % 12)) == (i, C + ( (i-3) % 12))
-        // ODD: (i, C + ( (i+3) % 12)) == (i, C + ( (i-9) % 12))
-        {2,C+11},{4,C+1},{6,C+3},{8,C+5},{10,C+7},
-        {1,C+4},{3,C+6},{5,C+8},{7,C+10},{9,C},{11,C+2},
+        // EVEN: (i, C + ((i-3) % 10)) == (i, C + ((i+7) % 10))
+        // ODD: (i, C + ((i+3) % 10)) == (i, C + ((i-7) % 10))
+        {2,C+9},{4,C+1},{6,C+3},{8,C+5},
+        {1,C+4},{3,C+6},{5,C+8},{7,C},{9,C+2},
     };
     std::vector< Drawing<klim> > solutions;
     std::vector<std::size_t> d_cnt(100,1); // assume no more than 100 unique drawings up to iso
@@ -101,25 +97,25 @@ END:
         return 0;
     }
 
-    // std::size_t idx = 0;
-    // for (auto it = solutions.begin();it!=solutions.end();it++) {
-    //     std::cout << "Drawing " << idx << std::endl;
-    //     // if ((*it).is_drawing_extensible()) {
-    //     //     std::cout << "is extensible!" << std::endl;
-    //     // }
-    //     std::string filename = "../quasiDrawings/nested_c" + std::to_string(C) + "/" + std::to_string(idx) + ".json";
-    //     std::ofstream of_json(filename);
-    //     nlohmann::ordered_json output_json = (*it).serialize_to_json();
-    //     of_json << output_json.dump(4);
-    //     of_json.close();
+    std::size_t idx = 0;
+    for (auto it = solutions.begin();it!=solutions.end();it++) {
+        std::cout << "Drawing " << idx << std::endl;
+        // if ((*it).is_drawing_extensible()) {
+        //     std::cout << "is extensible!" << std::endl;
+        // }
+        std::string filename = "../quasiDrawings/nested_c" + std::to_string(C) + "/" + std::to_string(idx) + ".json";
+        std::ofstream of_json(filename);
+        nlohmann::ordered_json output_json = (*it).serialize_to_json();
+        of_json << output_json.dump(4);
+        of_json.close();
 
-    //     std::string filename2 = "../quasiDrawings/nested_c" + std::to_string(C) + "/" + std::to_string(idx) + ".graphml";
-    //     // std::string filename2 = "../quasiDrawings/nested_c" + std::to_string(C) + "/" + std::to_string(idx) + "_iso.graphml";
-    //     std::ofstream of_graphml(filename2);
-    //     (*it).graphml_output(of_graphml);
-    //     of_graphml.close();
-    //     idx++;
-    // }
+        std::string filename2 = "../quasiDrawings/nested_c" + std::to_string(C) + "/" + std::to_string(idx) + ".graphml";
+        // std::string filename2 = "../quasiDrawings/nested_c" + std::to_string(C) + "/" + std::to_string(idx) + "_iso.graphml";
+        std::ofstream of_graphml(filename2);
+        (*it).graphml_output(of_graphml);
+        of_graphml.close();
+        idx++;
+    }
 
     for (std::size_t i = 0; i < solutions.size(); i++) {
         std::cout << "Drawing-" << i << " has " << d_cnt[i] << " isomorphic drawings" << std::endl;

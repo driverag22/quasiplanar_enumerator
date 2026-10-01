@@ -105,25 +105,25 @@ END:
         return 0;
     }
 
-    std::size_t idx = 0;
-    for (auto it = solutions.begin();it!=solutions.end();it++) {
-        std::cout << "Drawing " << idx << std::endl;
-        // if ((*it).is_drawing_extensible()) {
-        //     std::cout << "is extensible!" << std::endl;
-        // }
-        std::string filename = "../quasiDrawings/nested_c" + std::to_string(C) + "/" + std::to_string(idx) + ".json";
-        std::ofstream of_json(filename);
-        nlohmann::ordered_json output_json = (*it).serialize_to_json();
-        of_json << output_json.dump(4);
-        of_json.close();
+    // std::size_t idx = 0;
+    // for (auto it = solutions.begin();it!=solutions.end();it++) {
+    //     std::cout << "Drawing " << idx << std::endl;
+    //     // if ((*it).is_drawing_extensible()) {
+    //     //     std::cout << "is extensible!" << std::endl;
+    //     // }
+    //     std::string filename = "../quasiDrawings/nested_c" + std::to_string(C) + "/" + std::to_string(idx) + ".json";
+    //     std::ofstream of_json(filename);
+    //     nlohmann::ordered_json output_json = (*it).serialize_to_json();
+    //     of_json << output_json.dump(4);
+    //     of_json.close();
 
-        std::string filename2 = "../quasiDrawings/nested_c" + std::to_string(C) + "/" + std::to_string(idx) + ".graphml";
-        // std::string filename2 = "../quasiDrawings/nested_c" + std::to_string(C) + "/" + std::to_string(idx) + "_iso.graphml";
-        std::ofstream of_graphml(filename2);
-        (*it).graphml_output(of_graphml);
-        of_graphml.close();
-        idx++;
-    }
+    //     std::string filename2 = "../quasiDrawings/nested_c" + std::to_string(C) + "/" + std::to_string(idx) + ".graphml";
+    //     // std::string filename2 = "../quasiDrawings/nested_c" + std::to_string(C) + "/" + std::to_string(idx) + "_iso.graphml";
+    //     std::ofstream of_graphml(filename2);
+    //     (*it).graphml_output(of_graphml);
+    //     of_graphml.close();
+    //     idx++;
+    // }
 
     for (std::size_t i = 0; i < solutions.size(); i++) {
         std::cout << "Drawing-" << i << " has " << d_cnt[i] << " isomorphic drawings" << std::endl;
