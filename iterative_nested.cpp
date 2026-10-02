@@ -10,7 +10,12 @@
 #include <cassert>
 #include <algorithm>
 #include <chrono>
+#include <queue>
+#include <set>
+#include <tuple>
+#include <unordered_map>
 #include <nlohmann/json.hpp>
+#include <boost/functional/hash.hpp>
 
 // BGL Flow
 #include <boost/graph/adjacency_list.hpp>
@@ -49,6 +54,199 @@ namespace nested_cycle_build {
 
     typedef std::vector<std::size_t> Edge;
     typedef std::vector<Edge> Edges;
+
+    // Gadget-aware isomorphism
+    //
+    // The next extension step attaches the local edges to the active cycle vertices by label
+    // (0,...,cycle_size-1). So two partial drawings are interchangeable only under isomorphisms
+    // that map the active cycle onto itself by a permutation sym that is a symmetry of the local
+    // edges. Such an isomorphism maps every extension of one drawing to an extension of the other.
+    // Mirroring is always allowed (the mirror of an extension is an extension of the mirror).
+
+    typedef std::vector<std::size_t> CycleSym; // sym[i] = image of active cycle vertex i
+    typedef std::vector<std::uint32_t> IsoCode;
+
+    struct IsoCodeHash {
+        std::size_t operator()(const IsoCode& c) const { return boost::hash_range(c.begin(), c.end()); }
+    };
+
+    // All rotations/reflections sym of the old cycle 0,...,c-1 such that relabelling the old
+    // endpoints by sym and the new cycle by some rotation/reflection maps the local edge set
+    // (including the capacity entries) onto itself. The result is a group and contains the identity.
+    inline std::vector<CycleSym> gadget_symmetries(
+            std::size_t c, const std::function<std::vector<Edge>(std::size_t)>& builder) {
+        const std::size_t nm = c; // offset of the new cycle, any offset >= c works
+        const std::vector<Edge> edges = builder(nm);
+        for (const Edge& e : edges)
+            for (std::size_t i = 0; i < 2; ++i)
+                if (e[i] >= nm + c) throw std::runtime_error("gadget_symmetries: local edge out of range");
+
+        typedef std::tuple<std::size_t, std::size_t, std::size_t> Key;
+        auto edge_set = [&](const auto& map) {
+            std::set<Key> s;
+            for (const Edge& e : edges) {
+                std::size_t a = map(e[0]), b = map(e[1]);
+                s.emplace(std::min(a, b), std::max(a, b), e.size() > 2 ? e[2] + 1 : 0);
+            }
+            return s;
+        };
+        auto dihedral = [c](std::size_t i, std::size_t shift, bool refl) {
+            return refl ? (shift + c - i) % c : (shift + i) % c;
+        };
+        const std::set<Key> original = edge_set([](std::size_t x) { return x; });
+
+        std::vector<CycleSym> syms;
+        for (int refl_old = 0; refl_old < 2; ++refl_old)
+            for (std::size_t s_old = 0; s_old < c; ++s_old) {
+                CycleSym sym(c);
+                for (std::size_t i = 0; i < c; ++i) sym[i] = dihedral(i, s_old, refl_old);
+                bool found = false;
+                for (int refl_new = 0; refl_new < 2 && !found; ++refl_new)
+                    for (std::size_t s_new = 0; s_new < c && !found; ++s_new) {
+                        auto map = [&](std::size_t x) {
+                            return x < c ? sym[x] : nm + dihedral(x - nm, s_new, refl_new);
+                        };
+                        found = (edge_set(map) == original);
+                    }
+                if (found) syms.push_back(std::move(sym));
+            }
+        return syms;
+    }
+
+    // Pairwise test: true iff there is an isomorphism d1 -> d2 (possibly mirrored) of the
+    // planarizations that preserves vertex/crossing type and ncr, and acts on the active
+    // cycle vertices 0,...,c-1 as one of the given symmetries.
+    // PRE: Both drawings are connected and have at least c = sym.size() vertices.
+    template <int kplane>
+    bool are_isomorphic_gadget(const Drawing<kplane>& d1, const Drawing<kplane>& d2,
+            const std::vector<CycleSym>& syms) {
+        const std::size_t nv = d1.vertices.size();
+        if (nv != d2.vertices.size()) return false;
+        if (d1.crossings.size() != d2.crossings.size()) return false;
+        if (d1.edges.size() != d2.edges.size()) return false;
+        const std::size_t n = nv + d1.crossings.size();
+
+        // try to extend the fixed map on the cycle, aligning halfedge s1 (to vertex 0) with s2
+        auto try_map = [&](const CycleSym& sym, bool mirror, const HdsHalfedge* s1, const HdsHalfedge* s2) {
+            std::vector<std::size_t> phi(n, n), psi(n, n); // d1 -> d2 and inverse
+            for (std::size_t i = 0; i < sym.size(); ++i) { phi[i] = sym[i]; psi[sym[i]] = i; }
+            std::vector<char> queued(n, 0);
+            queued[0] = 1;
+            std::queue<std::pair<const HdsHalfedge*, const HdsHalfedge*>> q;
+            q.emplace(s1, s2);
+            while (!q.empty()) {
+                auto [a1, a2] = q.front();
+                q.pop();
+                const HdsHalfedge* t1 = a1;
+                const HdsHalfedge* t2 = a2;
+                do {
+                    if (t1->edge->ncr != t2->edge->ncr) return false;
+                    std::size_t i1 = t1->twin->vertex->label;
+                    std::size_t i2 = t2->twin->vertex->label;
+                    if ((i1 >= nv) != (i2 >= nv)) return false; // vertices to vertices, crossings to crossings
+                    if (phi[i1] == n) {
+                        if (psi[i2] != n) return false;
+                        phi[i1] = i2;
+                        psi[i2] = i1;
+                    } else if (phi[i1] != i2) return false;
+                    if (!queued[i1]) { queued[i1] = 1; q.emplace(t1->twin, t2->twin); }
+                    t1 = (mirror ? t1->twin->prev : t1->next->twin);
+                    t2 = t2->next->twin;
+                } while (t1 != a1 && t2 != a2);
+                if (t1 != a1 || t2 != a2) return false; // degrees differ
+            }
+            for (std::size_t z = 0; z < n; ++z)
+                if (phi[z] == n || psi[phi[z]] != z)
+                    throw std::runtime_error("are_isomorphic_gadget: disconnected drawing");
+            return true;
+        };
+
+        for (const CycleSym& sym : syms)
+            for (int mirror = 0; mirror < 2; ++mirror) {
+                const HdsHalfedge* s1 = d1.vertices[0].halfedge;
+                const HdsHalfedge* h2 = d2.vertices[sym[0]].halfedge;
+                if (!s1 || !h2) throw std::runtime_error("are_isomorphic_gadget: isolated cycle vertex");
+                const HdsHalfedge* s2 = h2;
+                do {
+                    if (try_map(sym, mirror, s1, s2)) return true;
+                    s2 = s2->next->twin;
+                } while (s2 != h2);
+            }
+        return false;
+    }
+
+    // Encode d by a BFS from halfedge h0 (pointing to the cycle vertex that sym maps to 0), with
+    // cycle vertex i labelled sym[i] and all other vertices/crossings labelled c, c+1, ... in
+    // order of discovery; rotations are reversed if mirror is set. The code is compared with best
+    // while it is built: stop as soon as it is larger, replace best if it ends up smaller.
+    // PRE: d is connected.
+    template <int kplane>
+    void encode_if_smaller(const Drawing<kplane>& d, const CycleSym& sym, bool mirror,
+            const HdsHalfedge* h0, IsoCode& best, IsoCode& cur) {
+        const std::uint32_t SEP = UINT32_MAX; // end of a rotation
+        const std::size_t c = sym.size();
+        const std::size_t nv = d.vertices.size();
+        const std::size_t n = nv + d.crossings.size();
+        const std::size_t unset = n + c;
+
+        std::vector<std::size_t> phi(n, unset);
+        for (std::size_t i = 0; i < c; ++i) phi[i] = sym[i];
+        std::vector<char> queued(n, 0);
+        std::size_t next_label = c, nqueued = 1;
+
+        cur.clear();
+        bool smaller = best.empty();
+        auto emit = [&](std::size_t x) {
+            if (!smaller) {
+                if (x > best[cur.size()]) return false;
+                if (x < best[cur.size()]) smaller = true;
+            }
+            cur.push_back(static_cast<std::uint32_t>(x));
+            return true;
+        };
+
+        if (!emit(nv) || !emit(d.crossings.size()) || !emit(d.edges.size())) return;
+        std::queue<const HdsHalfedge*> q;
+        q.push(h0);
+        queued[h0->vertex->label] = 1;
+        while (!q.empty()) {
+            const HdsHalfedge* s = q.front();
+            q.pop();
+            const HdsHalfedge* t = s;
+            do {
+                std::size_t w = t->twin->vertex->label;
+                if (phi[w] == unset) phi[w] = next_label++;
+                if (!queued[w]) { queued[w] = 1; ++nqueued; q.push(t->twin); }
+                if (!emit(2 * phi[w] + (w >= nv ? 1 : 0)) || !emit(t->edge->ncr)) return;
+                t = (mirror ? t->twin->prev : t->next->twin);
+            } while (t != s);
+            if (!emit(SEP)) return;
+        }
+        if (nqueued != n) throw std::runtime_error("canonical_code: disconnected drawing");
+        if (smaller) best.swap(cur);
+    }
+
+    // Canonical code of d: two drawings get the same code iff are_isomorphic_gadget holds for
+    // them (syms must be the group returned by gadget_symmetries). Cost: 2 * |syms| * deg(0) BFS
+    // runs, most of which stop early, instead of one pairwise test per stored solution.
+    // PRE: d is connected and has at least c = sym.size() vertices.
+    template <int kplane>
+    IsoCode canonical_code(const Drawing<kplane>& d, const std::vector<CycleSym>& syms) {
+        IsoCode best, cur;
+        for (const CycleSym& sym : syms) {
+            std::size_t u0 = std::find(sym.begin(), sym.end(), 0) - sym.begin();
+            const HdsHalfedge* h = d.vertices[u0].halfedge;
+            if (!h) throw std::runtime_error("canonical_code: isolated cycle vertex");
+            for (int mirror = 0; mirror < 2; ++mirror) {
+                const HdsHalfedge* s = h;
+                do {
+                    encode_if_smaller(d, sym, mirror, s, best, cur);
+                    s = s->next->twin;
+                } while (s != h);
+            }
+        }
+        return best;
+    }
 
     template <std::size_t klim>
     inline void check_and_terminate_if_invalid(const Drawing<klim>& d, const std::string& filename = "../quasiDrawings/failExample.graphml") {
@@ -127,6 +325,10 @@ namespace nested_cycle_build {
                     std::size_t mcf_max_paths = 4096;     // commodities with more candidate paths are dropped
                     bool mcf_log_progress = true;         // periodically print running MCF prune count
 
+                    // debug: cross-check every canonical-code lookup against pairwise are_isomorphic_gadget
+                    // (and count matches that only the label-agnostic are_isomorphic of iso.h would find)
+                    bool verify_iso = false;
+
                     // custom edge index checkpoints where early flow checks run.
                     std::vector<std::size_t> early_prune_checkpoints;
 
@@ -145,6 +347,10 @@ namespace nested_cycle_build {
                     std::size_t pruned_mcf_count = 0;   // subset of pruned_early_count caused by the MCF check
                     std::size_t mcf_unknown_count = 0;  // MCF checks that hit the node budget
                     double mcf_seconds = 0;             // total time spent in MCF checks
+                    double iso_seconds = 0;             // total time spent in isomorphism dedup
+                    std::size_t gadget_symmetry_count = 0;
+                    // verify_iso only: new drawings that the label-agnostic test would have discarded
+                    std::size_t label_agnostic_only_count = 0;
                 };
 
                 enum class McfResult { Feasible, Infeasible, Unknown };
@@ -461,6 +667,15 @@ namespace nested_cycle_build {
                     SearchResult result;
                     result.solutions.push_back({create_base_drawing(), 0});
                     auto last_mcf_log = std::chrono::steady_clock::now();
+
+                    // symmetries of the local edges on the active cycle, and canonical codes of all
+                    // solutions found so far (code -> index into result.solutions)
+                    const std::vector<CycleSym> syms = gadget_symmetries(config_.cycle_size, config_.local_edges_builder);
+                    result.gadget_symmetry_count = syms.size();
+                    std::unordered_map<IsoCode, std::size_t, IsoCodeHash> seen_codes;
+                    seen_codes.emplace(canonical_code(result.solutions[0].drawing, syms), 0);
+                    if (config_.verbose)
+                        std::cout << "Gadget symmetries on the active cycle: " << syms.size() << std::endl;
 
                     // we process the solutions in order, this is the current one we process
                     std::size_t solcount = 0;
@@ -897,28 +1112,34 @@ BACKUP:
                                     }
 
 
-                                    for (auto x = result.solutions.begin(); x != result.solutions.end(); ++x) {
-                                        if (are_isomorphic(x->drawing, nd)) {
-                                            if (config_.verbose) {
-                                                std::cout << "--- Discard drawing #" << result.discarded_count
-                                                    << ", isomorphic to solution #"
-                                                    << (x - result.solutions.begin()) << std::endl;
-                                            }
+                                    auto t_iso = std::chrono::steady_clock::now();
+                                    IsoCode code = canonical_code(nd, syms);
+                                    auto known = seen_codes.find(code);
 
-                                            // std::ofstream of;
-                                            // std::ostringstream filename;
-                                            // filename << "discard-" << discarded << ".graphml";
-                                            // of.open(filename.str());
-                                            // d.graphml_output(of);
-                                            // of.close();
+                                    if (config_.verify_iso) {
+                                        bool pairwise = false;
+                                        for (const auto& x : result.solutions)
+                                            if (are_isomorphic_gadget(x.drawing, nd, syms)) { pairwise = true; break; }
+                                        if (pairwise != (known != seen_codes.end()))
+                                            throw std::runtime_error("canonical code disagrees with are_isomorphic_gadget");
+                                        if (!pairwise)
+                                            for (const auto& x : result.solutions)
+                                                if (are_isomorphic(x.drawing, nd)) { ++result.label_agnostic_only_count; break; }
+                                    }
+                                    result.iso_seconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - t_iso).count();
 
-                                            ++result.discarded_count;
-                                            goto BACKUP;
+                                    if (known != seen_codes.end()) {
+                                        if (config_.verbose) {
+                                            std::cout << "--- Discard drawing #" << result.discarded_count
+                                                << ", isomorphic to solution #" << known->second << std::endl;
                                         }
+                                        ++result.discarded_count;
+                                        goto BACKUP;
                                     }
 
                                     // we have a new, valid solution -> record it
                                     if (!nd.is_valid()) throw std::runtime_error("nd is invalid");
+                                    seen_codes.emplace(std::move(code), result.solutions.size());
                                     result.solutions.push_back({nd, current_depth+1});
                                     is_extensible = true; // Mark as extensible to enable Pass 2
                                     std::cout << "Drawing #" << result.solutions.size()-1 << ":\n"
