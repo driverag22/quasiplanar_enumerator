@@ -1,4 +1,4 @@
-#include "iterative_nested_split.cpp"
+#include "iterative_nested_split.h"
 
 // C12 gadget for the split driver (see split_driver.h for usage).
 using namespace nested_cycle_build;
