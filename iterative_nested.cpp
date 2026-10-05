@@ -73,6 +73,11 @@ namespace nested_cycle_build {
     // All rotations/reflections sym of the old cycle 0,...,c-1 such that relabelling the old
     // endpoints by sym and the new cycle by some rotation/reflection maps the local edge set
     // (including the capacity entries) onto itself. The result is a group and contains the identity.
+    //
+    // Formally, computes the list of relabellings σ of cycle 0,...,c-1 s.t.:
+    //   - σ(i) = i+s [rotation] or  σ(i) = s-i (mod c) [reflection]
+    //   - some rot/refl π of the next cycle exists s.t. applying σ to old cycle and π to new maps 
+    //     the local edge builder's edge list onto itself
     inline std::vector<CycleSym> gadget_symmetries(
             std::size_t c, const std::function<std::vector<Edge>(std::size_t)>& builder) {
         const std::size_t nm = c; // offset of the new cycle, any offset >= c works
@@ -82,7 +87,7 @@ namespace nested_cycle_build {
                 if (e[i] >= nm + c) throw std::runtime_error("gadget_symmetries: local edge out of range");
 
         typedef std::tuple<std::size_t, std::size_t, std::size_t> Key;
-        auto edge_set = [&](const auto& map) {
+        auto edge_set = [&](const auto& map) { // returns edge set through given map
             std::set<Key> s;
             for (const Edge& e : edges) {
                 std::size_t a = map(e[0]), b = map(e[1]);
@@ -91,6 +96,7 @@ namespace nested_cycle_build {
             return s;
         };
         auto dihedral = [c](std::size_t i, std::size_t shift, bool refl) {
+            // rotation or reflection
             return refl ? (shift + c - i) % c : (shift + i) % c;
         };
         const std::set<Key> original = edge_set([](std::size_t x) { return x; });
@@ -104,6 +110,7 @@ namespace nested_cycle_build {
                 for (int refl_new = 0; refl_new < 2 && !found; ++refl_new)
                     for (std::size_t s_new = 0; s_new < c && !found; ++s_new) {
                         auto map = [&](std::size_t x) {
+                            // x < c takes old map, else take new map
                             return x < c ? sym[x] : nm + dihedral(x - nm, s_new, refl_new);
                         };
                         found = (edge_set(map) == original);
@@ -155,11 +162,20 @@ namespace nested_cycle_build {
                 } while (t1 != a1 && t2 != a2);
                 if (t1 != a1 || t2 != a2) return false; // degrees differ
             }
-            for (std::size_t z = 0; z < n; ++z)
+            for (std::size_t z = 0; z < n; ++z) {
+                if (z < nv && !d1.vertices[z].halfedge) continue; // isolated vertex
                 if (phi[z] == n || psi[phi[z]] != z)
                     throw std::runtime_error("are_isomorphic_gadget: disconnected drawing");
+            }
             return true;
         };
+
+        auto isolated = [](const Drawing<kplane>& d) {
+            std::size_t k = 0;
+            for (const auto& v : d.vertices) if (!v.halfedge) ++k;
+            return k;
+        };
+        if (isolated(d1) != isolated(d2)) return false;
 
         for (const CycleSym& sym : syms)
             for (int mirror = 0; mirror < 2; ++mirror) {
@@ -196,6 +212,7 @@ namespace nested_cycle_build {
 
         cur.clear();
         bool smaller = best.empty();
+        // helper function to add to cur code
         auto emit = [&](std::size_t x) {
             if (!smaller) {
                 if (x > best[cur.size()]) return false;
@@ -205,7 +222,10 @@ namespace nested_cycle_build {
             return true;
         };
 
-        if (!emit(nv) || !emit(d.crossings.size()) || !emit(d.edges.size())) return;
+        // isolated vertices (e.g. the reserved star vertex of an nd without large black faces) have no structure
+        std::size_t isolated = 0;
+        for (const auto& v : d.vertices) if (!v.halfedge) ++isolated;
+        if (!emit(nv) || !emit(d.crossings.size()) || !emit(d.edges.size()) || !emit(isolated)) return;
         std::queue<const HdsHalfedge*> q;
         q.push(h0);
         queued[h0->vertex->label] = 1;
@@ -217,19 +237,33 @@ namespace nested_cycle_build {
                 std::size_t w = t->twin->vertex->label;
                 if (phi[w] == unset) phi[w] = next_label++;
                 if (!queued[w]) { queued[w] = 1; ++nqueued; q.push(t->twin); }
+                // 1/0 bit determines crossing or not, so even labels are vertices, odd are crossings
                 if (!emit(2 * phi[w] + (w >= nv ? 1 : 0)) || !emit(t->edge->ncr)) return;
                 t = (mirror ? t->twin->prev : t->next->twin);
             } while (t != s);
             if (!emit(SEP)) return;
         }
-        if (nqueued != n) throw std::runtime_error("canonical_code: disconnected drawing");
+        if (nqueued + isolated != n) throw std::runtime_error("canonical_code: disconnected drawing");
         if (smaller) best.swap(cur);
     }
 
-    // Canonical code of d: two drawings get the same code iff are_isomorphic_gadget holds for
-    // them (syms must be the group returned by gadget_symmetries). Cost: 2 * |syms| * deg(0) BFS
-    // runs, most of which stop early, instead of one pairwise test per stored solution.
-    // PRE: d is connected and has at least c = sym.size() vertices.
+    // Canonical code of d with respect to the gadget symmetries syms.
+    //
+    // For each sym in syms, each orientation (mirror = 0/1), and each halfedge h
+    // pointing to the cycle vertex u0 with sym[u0] == 0, gets encoding 
+    // from encode_if_smaller.
+    // The code is the lexicographically smallest of these encodings.
+    //
+    // Two drawings get the same code iff there is an isomorphism of their
+    // planarizations (possibly mirrored) that preserves vertex/crossing type and
+    // ncr and acts on the active cycle 0,...,c-1 as an element of syms. 
+    // The "if" direction requires syms to be the group returned by gadget_symmetries.
+    //
+    // Cost: at most 2 * |syms| * deg(u0) BFS runs, each O(#halfedges); most runs
+    // stop after a few entries because the code is compared with the current
+    // best while it is built.
+    //
+    // PRE: d is connected and has at least c = syms[0].size() vertices.
     template <int kplane>
     IsoCode canonical_code(const Drawing<kplane>& d, const std::vector<CycleSym>& syms) {
         IsoCode best, cur;
@@ -902,7 +936,23 @@ BACKUP:
                                         if (fhedge[face[i->label]] == nullptr) fhedge[face[i->label]] = &*i;
                                     }
 
-                                    // Passive faces: incident to active cycle vertex v and (0,1,2)-step dual path to an active face/PFF
+                                    // dual distances (over crossable edges, i.e. dualg) from a set of faces
+                                    auto dual_distance = [&](auto in_set) {
+                                        std::vector<int> dist(num_faces, -1);
+                                        std::vector<std::size_t> queue;
+                                        for (std::size_t f = 0; f < num_faces; ++f) if (in_set(f)) { dist[f] = 0; queue.push_back(f); }
+                                        for (std::size_t qi = 0; qi < queue.size(); ++qi)
+                                            for (std::size_t g : dualg[queue[qi]])
+                                                if (dist[g] < 0) { dist[g] = dist[queue[qi]] + 1; queue.push_back(g); }
+                                        return dist;
+                                    };
+                                    const int kmax = static_cast<int>(klim); // max #crossings per edge (3)
+                                    const std::vector<int> dist_active = dual_distance([&](std::size_t f) { return active[f] >= 2; });
+
+                                    // Passive faces: not active, incident to an active cycle vertex v, and a dual path of length
+                                    // <= klim (= 3) to an active face/PFF whose first edge is not incident to v: an edge from v to
+                                    // the next cycle has at most klim crossings and ends in an active face (the 2-planar paper
+                                    // uses length <= 2)
                                     for (std::size_t i = 0; i < num_faces; ++i) {
                                         if (fhedge[i] == nullptr) throw std::runtime_error("no edge for face");
                                         if (active[i] != -1) continue;
@@ -913,30 +963,24 @@ BACKUP:
                                                 for (const HdsHalfedge* f = e_curr->next->next; f != e_curr; f = f->next) {
                                                     if (f->edge->ncr < klim &&
                                                             f->vertex->label != v &&
-                                                            f->twin->vertex->label != v) 
-                                                    {
-                                                        int fn = face[f->twin->label];
-                                                        if (active[fn] >= 2) {active[i] = 1; break;}
-                                                        for (std::size_t neighbor_f : dualg[fn])
-                                                            if (active[neighbor_f] >= 2) {active[i] = 1; break;}
+                                                            f->twin->vertex->label != v) {
+                                                        // first edge crosses f, the rest (<= klim-1 steps) leads to an active face
+                                                        int dfn = dist_active[face[f->twin->label]];
+                                                        if (dfn >= 0 && dfn <= kmax - 1) { active[i] = 1; break; }
                                                     }
                                                 }
-
                                             e_curr = e_curr->next;
                                         } while (active[i] == -1 && e_curr != fhedge[i]);
                                     }
 
-
-                                    // Transit faces: adjacent to one active and one (active||passive) face
-                                    for (std::size_t i = 0; i < num_faces; ++i) {
-                                        if (active[i] > 0) continue;
-                                        int an = 0, pn = 0; // active neighbor, passive neighbor count
-                                        for (std::size_t neighbor_f : dualg[i])
-                                            if (active[neighbor_f] >= 2) ++an;
-                                            else if (active[neighbor_f] == 1) ++pn;
-                                        if (an >= 2 || (an == 1 && pn >= 1))
+                                    // Transit faces: an edge with <= klim (= 3) crossings that starts in an active or passive face
+                                    // and ends in an active face passes through up to klim-1 (= 2) faces in between, so a face is
+                                    // transit if (dual distance from an active/passive face) + (dual distance to an active face)
+                                    // <= klim (the 2-planar paper: adjacent to an active and an active/passive face)
+                                    const std::vector<int> dist_ap = dual_distance([&](std::size_t f) { return active[f] >= 1; });
+                                    for (std::size_t i = 0; i < num_faces; ++i)
+                                        if (active[i] == -1 && dist_ap[i] >= 1 && dist_active[i] >= 1 && dist_ap[i] + dist_active[i] <= kmax)
                                             active[i] = 0;
-                                    }
 
                                     // determine relevant vertices
                                     // ensure that the active cycle vertices offset, ..., offset+12-1, are mapped to 0...13 in relv

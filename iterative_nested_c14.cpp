@@ -36,6 +36,7 @@ int main() {
     };
     // at 25%, 50% and 75%
     config.early_prune_checkpoints = {19,21,24}; // indices of local_edges_builder to check early prune
+    config.enable_mcf_pruning = true;
 
     // Instantiate and execute search
     NestedCycleSearcher<3> searcher(config);
