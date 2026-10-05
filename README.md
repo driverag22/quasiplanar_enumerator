@@ -45,9 +45,11 @@ Note that `kplane` is not necessarily the local crossing number of the drawing, 
 
 ## Computed quasiplane drawings
 
-The repository [quasiDrawings](https://github.com/driverag22/quasiDrawings) contains quasiplane drawings (usually both `json` and `graphml` files) of various graphs, including, 
-for example, all graphs on 11 vertices with $51$ edges $(6.5\cdot 11 - 20=51.5)$, in directory `./K11_minus_4`.
+The repository [quasiDrawings](https://github.com/driverag22/quasiDrawings) contains quasiplane drawings (usually both `json` and `graphml` files) of various graphs, 
+including (for example):
+ * all quasiplane drawings of $K_{10}$ can also be found, in directory `~/K10_all_quasi`,
+ * one quasiplane drawing for each graph on 11 vertices with $51$ edges $(6.5\cdot 11 - 20=51.5)$, in directory `~/K11_minus_4`.
+
 Determining all optimal quasiplanar graphs on 11 vertices is of interest because $K_{10}$ (the complete graph on 10 vertices) is quasiplanar (the 9 drawings of $K_{10}$ can also 
 be found in the repo).
-
 Generally they are exhaustive, meaning that all drawings (up to strong isomorphism) are stored, but this is not always the case.
