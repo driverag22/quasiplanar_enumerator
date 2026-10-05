@@ -194,10 +194,12 @@ struct Drawing {
             std::size_t u = step["u"];
             std::size_t v = step["v"];
             std::size_t edge_label = step["edge_label"];
+            // prescribed (artificial) crossings, absent in older files
+            std::size_t pcr = step.contains("pcr") ? step["pcr"].get<std::size_t>() : 0;
 
             // first edge
             if (edge_label == 0) {
-                add_first_edge(u, v);
+                add_first_edge(u, v, pcr);
                 label_to_edge_map[edge_label] = &(edges.back());
                 continue;
             }
@@ -280,7 +282,7 @@ struct Drawing {
                 p.push_back(found_target);
             }
 
-            add_edge(p, v, 0);
+            add_edge(p, v, pcr);
             label_to_edge_map[edge_label] = &(edges.back());
         }
     }
@@ -970,11 +972,24 @@ struct Drawing {
     nlohmann::json extract_drawing_recipe() const {
         nlohmann::json j_recipe = nlohmann::json::array();
 
+        // ncr = pcr + own crossings + crossings by other edges; the recipe only rebuilds the
+        // latter two, so store the prescribed (artificial) part pcr explicitly if nonzero
+        std::map<std::size_t, std::size_t> crossed_by_others;
+        for (const auto& edge : edges)
+            for (std::size_t j = 1; j + 1 < edge.built.size(); ++j)
+                if (edge.built[j] != nullptr && edge.built[j]->edge != nullptr)
+                    ++crossed_by_others[edge.built[j]->edge->label];
+
         for (const auto& edge : edges) {
             nlohmann::json step;
             step["edge_label"] = edge.label;
             step["u"] = edge.u;
             step["v"] = edge.v;
+
+            std::size_t real = (edge.built.size() >= 2 ? edge.built.size() - 2 : 0) + crossed_by_others[edge.label];
+            if (edge.ncr < real)
+                throw std::runtime_error("Inconsistent crossing count at edge " + std::to_string(edge.label));
+            if (edge.ncr > real) step["pcr"] = edge.ncr - real;
 
             if (edge.label != 0) {
                 // edge.built[0] points to the halfedge we insert after clockwise
