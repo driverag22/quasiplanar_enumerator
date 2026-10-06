@@ -3,6 +3,7 @@ drawings/
 jsons/
 dataAnalysis/
 *.slurm
+!nested/slurm/*.slurm
 *.err
 *.log
 .out/
@@ -11,3 +12,4 @@ build/
 include/
 compile.sh
 .ignore
+logs/

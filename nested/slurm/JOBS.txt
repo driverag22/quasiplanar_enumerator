@@ -1,0 +1,17 @@
+2026-10-03T12:28:48+02:00 15971033 build (test)
+2026-10-03T12:28:54+02:00 15971063 search test_k6_N8 (8 tasks, 20 min)
+2026-10-03T12:40:09+02:00 15971716 probe (boost headers)
+2026-10-03T12:41:38+02:00 15971844 search test_k6_N8 (8 tasks, 20 min)
+2026-10-03T13:20:46+02:00 15975480 search c12_l0_p1: level 0 pass 1, 100 tasks, depth 8, reach_from=1, odd tasks final_face_from=12, 7 days, binary bin/split_c12_l0_p1
+2026-10-03T18:37:40+02:00 15975480 cancelled (old binary, replaced by c12_l0_p2)
+2026-10-03T18:39:37+02:00 15987635 search c12_l0_p2: level 0 pass 1, 100 tasks, depth 11 (385138 prefixes), reach_from=1, final_face_from=1, 7 days, binary bin/split_c12_l0_p2
+2026-10-03T20:25:18+02:00 15995303 post: merge c12_l0_p2 -> c12_l0_p2_merged, Pass 2 on all parents -> c12_l1_p2, merge_solutions -> c12_final (binary bin/split_c12_post)
+2026-10-03T20:39:45+02:00 15996163 search c14_l0_p1: C14 level 0 pass 1, 100 tasks, depth 12 (1945303 prefixes), reach_from=1, final_face_from=1, 7 days, binary bin/split_c14_l0_p1
+2026-10-03T20:39:45+02:00 15996164 search c12_l1_p1_sample: C12 level 1 pass 1 cost sample, 20 parents (every 534th of c12_l0_p2_merged), one per task, 2 h, binary bin/split_c12_l1_sample
+2026-10-03T21:11:28+02:00 15996163 throttled to 30 running tasks (to let the level-1 sample run); 15997811 restores 100 automatically after 15996164 ends
+2026-10-03T22:21:16+02:00 16000982 post_c14: after 15996163 ends, if all 1945303 prefixes done: merge -> c14_l0_p1_merged, Pass 2 -> c14_l1_p2, merge_solutions -> c14_final (binary bin/split_c14_post)
+2026-10-04T00:22:38+02:00 15996164: cancelled the still pending sample tasks 13-19 (enough data, frees slots for C14); running tasks finish normally
+2026-10-05T09:06:22+02:00 16103722 search c12_gk_l0: C12 level 0 pass 1 with general-k face classification + placement check/filter, 100 tasks, depth 12 (876629 prefixes), 7 days, binary bin/split_c12_gk_l0
+2026-10-05T09:06:22+02:00 16103725 post_gk for c12_gk_l0 (after 16103722): merge, Pass 2 on base and on all intermediate drawings, final dedup
+2026-10-05T09:06:22+02:00 16103726 search c14_gk_l0: C14 level 0 pass 1 with general-k face classification + placement check/filter, 100 tasks, depth 12 (877520 prefixes), 7 days, binary bin/split_c14_gk_l0
+2026-10-05T09:06:23+02:00 16103727 post_gk for c14_gk_l0 (after 16103726): merge, Pass 2 on base and on all intermediate drawings, final dedup

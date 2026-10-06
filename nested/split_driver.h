@@ -1,7 +1,19 @@
 #ifndef SPLIT_DRIVER_H
 #define SPLIT_DRIVER_H
 
+#include "iterative_nested_split.h"
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
 #include <map>
+#include <set>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+// klim and make_config() (the gadget) are defined by the including iterative_nested_c<k>_split.cpp
+using namespace nested_cycle_build;
 
 // Split driver for cluster job arrays (shared by iterative_nested_c<k>_split.cpp, which define klim and
 // make_config() with the gadget before including this file).
