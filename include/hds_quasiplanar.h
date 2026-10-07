@@ -1378,8 +1378,9 @@ struct Drawing {
                 }
                 step["crossed"] = pos_arr;
                 // built.back() points to v, the new edge comes right after its edge in the rotation at v
-                // (null if v was isolated)
-                if (edge.built.back() != nullptr) step["end_after_edge"] = edge.built.back()->edge->label;
+                // (if v was isolated, add_edge stores the edge's own halfedge there: no entry)
+                if (edge.built.back() != nullptr && edge.built.back()->edge != &edge)
+                    step["end_after_edge"] = edge.built.back()->edge->label;
             }
             j_recipe.push_back(step);
         }
