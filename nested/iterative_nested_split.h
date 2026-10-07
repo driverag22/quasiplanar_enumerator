@@ -498,9 +498,44 @@ namespace nested_cycle_build {
                     // avoids generating placements that would be pruned right after being added.
                     bool placement_filter = false;
 
+                    // In-memory use (e.g. the saturation test, see split_driver.h): input_drawing replaces input_parents,
+                    // split_files = false switches off all file I/O of split_mode (output dir, done_units, extensible,
+                    // children, solutions), and the callbacks receive the drawings instead.
+                    const Drawing<klim>* input_drawing = nullptr;
+                    bool split_files = true;
+                    // called at every Pass 1 leaf that has a potential final face (before the duplicate check, so for
+                    // every such complete drawing d), with the label nm of the first new cycle vertex and the canonical
+                    // code of the reduced drawing nd
+                    std::function<void(const Drawing<klim>&, std::size_t, const IsoCode&)> leaf_callback;
+                    // debug: called with the drawing whenever the placement check prunes it
+                    std::function<void(const Drawing<klim>&, const char* reason)> placement_prune_callback;
+                    // called for every Pass 2 complete drawing, with the label nm of the first new cycle vertex
+                    std::function<void(const Drawing<klim>&, std::size_t)> solution_callback;
+                    // labels of the parent's active cycle (default 0, ..., cycle_size-1, as in reduced drawings): the old
+                    // endpoint i < cycle_size of a gadget edge is attached to active_cycle[i] (e.g. for unreduced drawings)
+                    std::vector<std::size_t> active_cycle;
+                    // extra isolated vertices appended after the new cycle (parent without crossings), to be used by a
+                    // later pass on the complete drawing: Pass 2 on a parent with crossings takes its new cycle from
+                    // them (vertices can only be added while a drawing has no crossings)
+                    std::size_t reserve_vertices = 0;
+
                     // Generator function for local edges added during extension step.
                     // Takes parent vertex offset (nm) and cycle size, returns vector of edges {u, v, [capacity]}.
                     std::function<std::vector<Edge>(std::size_t nm)> local_edges_builder;
+
+                    // optional extra local edges added in Pass 1 only, after the local edges (e.g. chords of the
+                    // crossable new cycle; the uncrossable cycle of Pass 2 gets none). Part of the gadget symmetries.
+                    std::function<std::vector<Edge>(std::size_t nm)> pass1_extra_edges_builder;
+
+                    // local edges of Pass 1 including the extra ones (for gadget_symmetries)
+                    std::function<std::vector<Edge>(std::size_t nm)> gadget_edges_builder() const {
+                        if (!pass1_extra_edges_builder) return local_edges_builder;
+                        return [lb = local_edges_builder, xb = pass1_extra_edges_builder](std::size_t nm) {
+                            std::vector<Edge> es = lb(nm), x = xb(nm);
+                            es.insert(es.end(), x.begin(), x.end());
+                            return es;
+                        };
+                    }
                 };
 
                 // Search summary stats
@@ -821,6 +856,7 @@ namespace nested_cycle_build {
 
                     // stably sort remaining edges: edges with fewer paths (1, 2, 3) are prioritized first.
                     // Edges with >3 paths maintain their original order at the end.
+                    // (The result depends on the current order, i.e. on the search history; see split_snapshot.)
                     std::stable_sort(
                         rem_edges_with_counts.begin(),
                         rem_edges_with_counts.end(),
@@ -1017,8 +1053,10 @@ namespace nested_cycle_build {
                         std::size_t line;        // .jsonl: line index (for messages)
                     };
                     std::vector<ParentRef> parent_refs;
-                    if (config_.split_mode) {
-                        std::filesystem::create_directories(config_.output_dir);
+                    if (config_.split_mode && config_.input_drawing) {
+                        parent_refs.push_back({"<memory>", -1, 0});
+                    } else if (config_.split_mode) {
+                        if (config_.split_files) std::filesystem::create_directories(config_.output_dir);
                         std::vector<std::string> inputs = config_.input_parents;
                         if (inputs.empty()) inputs.push_back("base");
                         for (const std::string& path : inputs) {
@@ -1041,6 +1079,7 @@ namespace nested_cycle_build {
                     }
                     auto load_parent = [&](const ParentRef& r) -> Drawing<klim> {
                         if (r.path == "base") return create_base_drawing();
+                        if (r.path == "<memory>") return Drawing<klim>(*config_.input_drawing);
                         std::ifstream in(r.path, std::ios::binary);
                         if (!in) throw std::runtime_error("cannot open parent " + r.path);
                         if (r.offset < 0) return Drawing<klim>(nlohmann::json::parse(in));
@@ -1060,7 +1099,7 @@ namespace nested_cycle_build {
                     // output_dir/done_units.txt and skipped; new children are appended to children.jsonl
                     // (a line cut off by a kill is skipped by the merge)
                     std::set<std::size_t> done_units;
-                    if (config_.split_mode) {
+                    if (config_.split_mode && config_.split_files) {
                         std::ifstream in(config_.output_dir + "/done_units.txt");
                         for (std::size_t u; in >> u;) done_units.insert(u);
                         // a kill may have cut off the last child line: start new children on a fresh line
@@ -1079,8 +1118,10 @@ namespace nested_cycle_build {
                     std::size_t open_unit = SIZE_MAX;
                     auto close_unit = [&]() {
                         if (open_unit == SIZE_MAX) return;
-                        std::ofstream out(config_.output_dir + "/done_units.txt", std::ios::app);
-                        out << open_unit << "\n";
+                        if (config_.split_files) {
+                            std::ofstream out(config_.output_dir + "/done_units.txt", std::ios::app);
+                            out << open_unit << "\n";
+                        }
                         ++result.units_done;
                         open_unit = SIZE_MAX;
                     };
@@ -1091,7 +1132,7 @@ namespace nested_cycle_build {
 
                     // symmetries of the local edges on the active cycle, and canonical codes of all
                     // solutions found so far (code -> index into result.solutions)
-                    const std::vector<CycleSym> syms = gadget_symmetries(config_.cycle_size, config_.local_edges_builder);
+                    const std::vector<CycleSym> syms = gadget_symmetries(config_.cycle_size, config_.gadget_edges_builder());
                     result.gadget_symmetry_count = syms.size();
                     std::unordered_map<IsoCode, std::size_t, IsoCodeHash> seen_codes;
                     for (std::size_t i = 0; i < result.solutions.size(); ++i)
@@ -1160,10 +1201,28 @@ namespace nested_cycle_build {
                                     << " for Drawing #" << solcount << " <<<" << std::endl;
                             }
 
+                            // the new cycle vertices: appended if the parent has no crossings (add_vertices is only
+                            // possible then, since crossing labels follow the vertex labels), plus reserve_vertices isolated
+                            // ones for later use; a parent with crossings must provide them as reserved (trailing isolated)
+                            // vertices from an earlier pass
                             Drawing<klim> d = d_parent;
-                            std::size_t nm = d.vertices.size();
-                            d.add_vertices(config_.cycle_size);
-                            std::vector<Edge> local_edges = config_.local_edges_builder(nm);
+                            std::size_t nm = d_parent.vertices.size(); // first new cycle vertex
+                            if (d_parent.crossings.empty()) {
+                                d.add_vertices(config_.cycle_size + config_.reserve_vertices);
+                            } else {
+                                std::size_t trailing = 0;
+                                while (trailing < d_parent.vertices.size() && !d_parent.vertices[d_parent.vertices.size() - 1 - trailing].halfedge)
+                                    ++trailing;
+                                if (trailing < config_.cycle_size)
+                                    throw std::runtime_error("parent with crossings has too few reserved vertices (see Config::reserve_vertices)");
+                                nm = d_parent.vertices.size() - trailing;
+                            }
+                            std::vector<Edge> local_edges = constrained == 0 ? config_.gadget_edges_builder()(nm)
+                                                                             : config_.local_edges_builder(nm);
+                            if (!config_.active_cycle.empty())
+                                for (Edge& le : local_edges)
+                                    for (std::size_t i = 0; i < 2; ++i)
+                                        if (le[i] < nm) le[i] = config_.active_cycle.at(le[i]); // old endpoint: parent's cycle
                             // placement filter cache per position: allowed landing faces of the new vertex placed by
                             // the edge at that position; valid while the edge before it was not re-placed
                             struct PlacementFilter { bool valid = false; std::uint64_t stamp = 0; std::vector<int> face; std::vector<char> allowed; };
@@ -1176,6 +1235,13 @@ namespace nested_cycle_build {
                                 std::stable_partition(local_edges.begin(), local_edges.end(),
                                         [nm](const Edge& e) { return e[0] < nm || e[1] < nm; });
                             }
+                            // split mode: order of local_edges when an owned unit was entered. The reordering
+                            // (check_remaining_edges_reachability) depends on the current order, so searching
+                            // the unit's subtree changes the order of the unplaced edges; it is restored when
+                            // the search returns above the split depth, so that every task numbers the prefixes
+                            // alike (otherwise some prefixes were searched by no task).
+                            std::vector<Edge> split_snapshot;
+                            bool split_snapshot_valid = false;
                             auto e = local_edges.begin();
                             uint64_t total_local_iterations = 0;
 
@@ -1262,6 +1328,11 @@ BACKUP:
 PLACED: // edge e has just been added (re-entered when the split check rejects a path)
                                 // reachability check for remaining unplaced braid edges
                                 std::size_t current_edge_idx = static_cast<std::size_t>(e - local_edges.begin());
+                                if (split_snapshot_valid && current_edge_idx + 1 <= config_.split_depth) {
+                                    // back above the split depth after an owned unit: undo its reorderings
+                                    local_edges = split_snapshot;
+                                    split_snapshot_valid = false;
+                                }
                                 placed_stamp[current_edge_idx] = ++stamp_counter;
                                 if (config_.enable_early_pruning && (current_edge_idx + 1 < local_edges.size())) {
                                     bool is_checkpoint = false;
@@ -1295,22 +1366,30 @@ PLACED: // edge e has just been added (re-entered when the split check rejects a
                                                     << ", budget exhausted " << result.mcf_unknown_count
                                                     << ", mcf time " << result.mcf_seconds << "s" << std::endl;
                                             }
+                                            if (r == McfResult::Infeasible && config_.placement_prune_callback) config_.placement_prune_callback(d, "mcf");
                                             return r == McfResult::Infeasible;
                                         };
 
                                         auto placement_prunes = [&]() -> bool {
                                             if (!placement_check || placements_still_possible(d, local_edges, current_edge_idx + 1, constrained)) return false;
+                                            if (config_.placement_prune_callback) config_.placement_prune_callback(d, "placement");
                                             ++result.pruned_placement_count;
                                             return true;
                                         };
 
                                         auto final_face_prunes = [&]() -> bool {
                                             if (!final_face_check || final_face_still_possible(d, nm)) return false;
+                                            if (config_.placement_prune_callback) config_.placement_prune_callback(d, "final_face");
                                             ++result.pruned_final_face_count;
                                             return true;
                                         };
 
-                                        while (!check_remaining_edges_reachability(d, local_edges, current_edge_idx + 1) || placement_prunes() || mcf_prunes() || final_face_prunes()) {
+                                        auto reach_prunes = [&]() -> bool {
+                                            if (check_remaining_edges_reachability(d, local_edges, current_edge_idx + 1)) return false;
+                                            if (config_.placement_prune_callback) config_.placement_prune_callback(d, "reach");
+                                            return true;
+                                        };
+                                        while (reach_prunes() || placement_prunes() || mcf_prunes() || final_face_prunes()) {
                                             // std::string filename2 = "../quasiDrawings/failExample.graphml";
                                             // std::ofstream of_graphml(filename2);
                                             // d.graphml_output(of_graphml);
@@ -1340,6 +1419,8 @@ PLACED: // edge e has just been added (re-entered when the split check rejects a
                                     close_unit(); // reaching the next unit completes the previous one
                                     if (owns(unit)) {
                                         open_unit = unit++;
+                                        split_snapshot = local_edges;
+                                        split_snapshot_valid = true;
                                     } else {
                                         ++unit;
                                         p = d.edges.back().built;
@@ -1363,7 +1444,10 @@ PLACED: // edge e has just been added (re-entered when the split check rejects a
                                         }
 
 
-                                        if (config_.split_mode) {
+                                        if (config_.solution_callback) config_.solution_callback(d, nm);
+                                        if (config_.split_mode && !config_.split_files) {
+                                            // in-memory use: the callback got the drawing
+                                        } else if (config_.split_mode) {
                                             // one file for all complete drawings of this task, one JSON per line
                                             std::ofstream of_json(config_.output_dir + "/solutions.jsonl", std::ios::app);
                                             nlohmann::ordered_json j = d.serialize_to_json();
@@ -1518,6 +1602,7 @@ PLACED: // edge e has just been added (re-entered when the split check rejects a
                                     std::vector<const HdsHalfedge*> prelv; // possibly relevant halfedges
 
                                     for (auto i = d.vertices.begin(); i != d.vertices.end(); ++i) {
+                                        if (!i->halfedge) continue; // reserved (isolated) vertex
                                         auto e = i->halfedge;
                                         std::size_t nirf = 0; // #incident relevant faces
                                         auto a = e;
@@ -1686,13 +1771,14 @@ PLACED: // edge e has just been added (re-entered when the split check rejects a
                                     }
 
 
-                                    if (config_.split_mode && reported_extensible.insert(solcount).second) {
+                                    if (config_.split_mode && config_.split_files && reported_extensible.insert(solcount).second) {
                                         // written right away, so it survives a job killed by its time limit
                                         std::ofstream ext(config_.output_dir + "/extensible.txt", std::ios::app);
                                         ext << describe_parent(parent_refs[solcount]) << "\n";
                                     }
                                     auto t_iso = std::chrono::steady_clock::now();
                                     IsoCode code = canonical_code(nd, syms);
+                                    if (config_.leaf_callback) config_.leaf_callback(d, nm, code);
                                     auto known = seen_codes.find(code);
 
                                     if (config_.verify_iso) {
@@ -1727,7 +1813,7 @@ PLACED: // edge e has just been added (re-entered when the split check rejects a
                                     }
                                     is_extensible = true; // Mark as extensible to enable Pass 2
                                     if (config_.split_mode) {
-                                        if (config_.split_export_children) {
+                                        if (config_.split_export_children && config_.split_files) {
                                             std::ofstream of_json(config_.output_dir + "/children.jsonl", std::ios::app);
                                             nlohmann::ordered_json j = nd.serialize_to_json();
                                             j["meta"] = gadget_crossings(d, nm);
