@@ -232,7 +232,33 @@ struct Drawing {
             const auto& crossed = step["crossed_edges"];
             HdsHalfedge* face_runner = p0; // start from p0
 
-            for (const auto& crossed_label_json : crossed) {
+            // is h on the boundary of the face of face_runner?
+            auto on_current_face = [&](const HdsHalfedge* h) {
+                const HdsHalfedge* x = face_runner;
+                do { if (x == h) return true; x = x->next; } while (x != face_runner);
+                return false;
+            };
+
+            // unambiguous format: segment and side of each crossing
+            // files pre 10-2026 may lack this
+            if (step.contains("crossed")) {
+                for (const auto& c : step["crossed"]) {
+                    auto cross_it = label_to_edge_map.find(c["edge"].get<std::size_t>());
+                    if (cross_it == label_to_edge_map.end())
+                        throw std::runtime_error("Deserialization error: Crossed edge label " + c["edge"].dump() + " not mapped.");
+                    const std::string side = c["side"];
+                    if (side != "left" && side != "right")
+                        throw std::runtime_error("Deserialization error: side must be left or right, got " + side);
+                    HdsHalfedge* h = halfedge_at(cross_it->second, c["segment"].get<std::size_t>(), side == "left" ? 0 : 1);
+                    if (!on_current_face(h))
+                        throw std::runtime_error("Deserialization error: crossing of edge " + c["edge"].dump() + " (segment " +
+                                c["segment"].dump() + ", " + side + ") is not on the current face boundary.");
+                    p.push_back(h);
+                    face_runner = h->twin;
+                }
+            }
+
+            for (const auto& crossed_label_json : (step.contains("crossed") ? nlohmann::json::array() : crossed)) {
                 std::size_t crossed_label = crossed_label_json;
 
                 auto cross_it = label_to_edge_map.find(crossed_label);
@@ -264,6 +290,18 @@ struct Drawing {
             // reconstruct target pointer p[l-1]
             if (vertices[v].halfedge == nullptr) {
                 p.push_back(nullptr); // target vertex is isolated
+            } else if (step.contains("end_after_edge")) {
+                // unambiguous format: the edge after which the new edge arrives at v
+                auto end_it = label_to_edge_map.find(step["end_after_edge"].get<std::size_t>());
+                if (end_it == label_to_edge_map.end())
+                    throw std::runtime_error("Deserialization error: end_after_edge " + step["end_after_edge"].dump() + " not mapped.");
+                HdsHalfedge* found_target = nullptr;
+                for (auto& he : halfedges)
+                    if (he.edge == end_it->second && he.vertex->label == v) { found_target = &he; break; }
+                if (!found_target || !on_current_face(found_target))
+                    throw std::runtime_error("Deserialization error: end_after_edge " + step["end_after_edge"].dump() +
+                            " at vertex " + std::to_string(v) + " is not on the current face boundary.");
+                p.push_back(found_target);
             } else {
                 HdsHalfedge* found_target = nullptr;
                 HdsHalfedge* start_face = face_runner;
@@ -426,6 +464,46 @@ struct Drawing {
     }
 
     public:
+    // JSON recipe: where edge x crossed h = x.built[i] when x was inserted, as (segment, side):
+    // segment of e = h->edge from e->u, counting only crossings with earlier edges (smaller label);
+    // side 0 ("left") if h is directed e->u -> e->v, else 1 ("right").
+    std::pair<std::size_t, std::size_t> crossing_at_insertion(const HdsEdge& x, const HdsHalfedge* h) const {
+        const HdsEdge* e = h->edge;
+        // direction of h: follow the edge forward (straight through crossings) to a real vertex
+        const HdsHalfedge* f = h;
+        while (f->vertex->label >= vertices.size()) f = f->next->twin->next;
+        const std::size_t side = f->vertex->label == e->v ? 0 : 1;
+        // walk e from u and count the crossings before the one with x that x's predecessors made
+        const HdsHalfedge* g = nullptr;
+        for (const auto& hh : halfedges)
+            if (hh.edge == e && hh.twin->vertex->label == e->u) { g = &hh; break; }
+        if (!g) throw std::runtime_error("crossing_at_insertion: edge without a halfedge at u");
+        std::size_t segment = 0;
+        for (;;) {
+            if (g->vertex->label < vertices.size())
+                throw std::runtime_error("crossing_at_insertion: edge " + std::to_string(x.label) +
+                        " does not cross edge " + std::to_string(e->label));
+            const HdsEdge* other = g->next->edge; // the edge crossing e at this crossing
+            if (other == &x) break;
+            if (other->label < x.label) ++segment;
+            g = g->next->twin->next;
+        }
+        return {segment, side};
+    }
+
+    // inverse for the loader: the halfedge of edge e at that segment (in the current drawing) and side
+    HdsHalfedge* halfedge_at(const HdsEdge* e, std::size_t segment, std::size_t side) {
+        HdsHalfedge* g = nullptr; // segment 0 directed u -> v: leaves u
+        for (auto& h : halfedges)
+            if (h.edge == e && h.twin->vertex->label == e->u) { g = &h; break; }
+        if (!g) throw std::runtime_error("halfedge_at: edge without a halfedge at u");
+        for (std::size_t s = 0; s < segment; ++s) {
+            if (g->vertex->label < vertices.size()) throw std::runtime_error("halfedge_at: segment out of range");
+            g = g->next->twin->next;
+        }
+        return side == 0 ? g : g->twin;
+    }
+
     // add a first edge to the drawing, with pcr prescribed (artifical)
     // crossings; return the halfedge that points to v
     HdsHalfedge* add_first_edge(std::size_t u,
@@ -1006,6 +1084,18 @@ struct Drawing {
                     }
                 }
                 step["crossed_edges"] = crossed_arr;
+
+                // unambiguous positions (crossed_edges alone does not say which segment/side is crossed,
+                // nor at which angle the edge arrives at a target that occurs several times on the face)
+                auto pos_arr = nlohmann::json::array();
+                for (std::size_t j = 1; j + 1 < edge.built.size(); ++j) {
+                    const auto c = crossing_at_insertion(edge, edge.built[j]);
+                    pos_arr.push_back({{"edge", edge.built[j]->edge->label}, {"segment", c.first}, {"side", c.second == 0 ? "left" : "right"}});
+                }
+                step["crossed"] = pos_arr;
+                // built.back() points to v, the new edge comes right after its edge in the rotation at v
+                // (null if v was isolated)
+                if (edge.built.back() != nullptr) step["end_after_edge"] = edge.built.back()->edge->label;
             }
             j_recipe.push_back(step);
         }
