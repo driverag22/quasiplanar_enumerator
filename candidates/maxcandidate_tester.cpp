@@ -85,14 +85,18 @@ void shuffle_order(std::vector<T>& items, std::mt19937& rng) {
 
 bool is_drawing_extensible(const Drawing<klim>& d, 
         const std::vector<std::pair<std::size_t, std::size_t>>& missingEdges) {
+    // the creation paths point into d_search, so they must be added to d_search itself
+    // (adding them to a copy rewires d_search's halfedges); add, verify, and remove again
+    Drawing<klim> d_search(d);
     for (const auto& [u, v] : missingEdges) {
-        Drawing<klim> d_search(d);
         HdsPath p = d_search.first_path(u, v);
 
         while (!p.empty()) {
-            Drawing<klim> d_test(d);
-            d_test.add_edge(p, v);
-            if (d_test.verify_quasiplanarity()) {
+            d_search.add_edge(p, v);
+            const bool quasi = d_search.verify_quasiplanarity();
+            p = d_search.edges.back().built;
+            d_search.remove_edge();
+            if (quasi) {
                 std::cout << "\n  [!] Edge (" << u << ", " << v << ") can be legally added!";
                 return true;
             } else {
