@@ -9,7 +9,6 @@ dataAnalysis/
 .out/
 .out_err/
 build/
-include/
 compile.sh
 .ignore
 logs/
