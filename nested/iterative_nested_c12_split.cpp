@@ -35,6 +35,8 @@ NestedCycleSearcher<klim>::Config make_config() {
     //   EXTRA_BRAID: old vertex i -> new vertex i+d (mod 12) for all i with i mod s == p (in every layer)
     //   EXTRA_CHORD: chord new vertex i -> new vertex i+d (mod 12) for all i with i mod s == p, Pass 1 only (pairs
     //                within D1 / D3 count as present in the saturation test)
+    //   EXTRA_BRAID_P1 / EXTRA_BRAID_P2: like EXTRA_BRAID, but only in Pass 1 (D1-D2) / only in Pass 2 (D2-D3),
+    //                for braid edges in every other layer only
     // step s defaults to 2
     auto parse_classes = [](const char* name, const std::string& spec) {
         std::vector<std::array<std::size_t, 3>> classes; // {d, p, s}
@@ -61,17 +63,30 @@ NestedCycleSearcher<klim>::Config make_config() {
         }
         return classes;
     };
+    // braid edges of the classes that are not among the edges of base (yet)
+    auto braid_edges = [](const std::vector<std::array<std::size_t, 3>>& classes, std::size_t nm, const std::vector<Edge>& base) {
+        std::set<std::pair<std::size_t, std::size_t>> have;
+        for (const auto& e : base) have.insert({e[0], e[1]});
+        std::vector<Edge> es;
+        for (const auto& [d, par, step] : classes)
+            for (std::size_t i = par % step; i < 12; i += step)
+                if (have.insert({i, nm + (i + d) % 12}).second) es.push_back({i, nm + (i + d) % 12});
+        return es;
+    };
     if (const char* x = std::getenv("EXTRA_BRAID")) {
         const auto classes = parse_classes("EXTRA_BRAID", x);
         auto base_builder = config.local_edges_builder;
-        config.local_edges_builder = [base_builder, classes](std::size_t nm) {
+        config.local_edges_builder = [base_builder, classes, braid_edges](std::size_t nm) {
             auto es = base_builder(nm);
-            std::set<std::pair<std::size_t, std::size_t>> have;
-            for (const auto& e : es) have.insert({e[0], e[1]});
-            for (const auto& [d, par, step] : classes)
-                for (std::size_t i = par % step; i < 12; i += step)
-                    if (have.insert({i, nm + (i + d) % 12}).second) es.push_back({i, nm + (i + d) % 12});
+            const auto extra = braid_edges(classes, nm, es);
+            es.insert(es.end(), extra.begin(), extra.end());
             return es;
+        };
+    }
+    if (const char* x = std::getenv("EXTRA_BRAID_P2")) {
+        const auto classes = parse_classes("EXTRA_BRAID_P2", x);
+        config.pass2_extra_edges_builder = [base_builder = config.local_edges_builder, classes, braid_edges](std::size_t nm) {
+            return braid_edges(classes, nm, base_builder(nm));
         };
     }
     if (const char* x = std::getenv("EXTRA_CHORD")) {
@@ -84,6 +99,15 @@ NestedCycleSearcher<klim>::Config make_config() {
                         chords.insert({nm + std::min(i, (i + k) % 12), nm + std::max(i, (i + k) % 12)});
             std::vector<Edge> es;
             for (const auto& [a, b] : chords) es.push_back({a, b});
+            return es;
+        };
+    }
+    if (const char* x = std::getenv("EXTRA_BRAID_P1")) { // braid edges first, then the chords (if any)
+        const auto classes = parse_classes("EXTRA_BRAID_P1", x);
+        config.pass1_extra_edges_builder = [base_builder = config.local_edges_builder, chords = config.pass1_extra_edges_builder,
+                classes, braid_edges](std::size_t nm) {
+            auto es = braid_edges(classes, nm, base_builder(nm));
+            if (chords) { const auto c = chords(nm); es.insert(es.end(), c.begin(), c.end()); }
             return es;
         };
     }

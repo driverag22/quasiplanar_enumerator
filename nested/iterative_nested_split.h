@@ -527,6 +527,10 @@ namespace nested_cycle_build {
                     // crossable new cycle; the uncrossable cycle of Pass 2 gets none). Part of the gadget symmetries.
                     std::function<std::vector<Edge>(std::size_t nm)> pass1_extra_edges_builder;
 
+                    // optional extra local edges added in Pass 2 only, after the local edges (e.g. braid edges in
+                    // every other layer only). Not part of the gadget symmetries (those are used in Pass 1).
+                    std::function<std::vector<Edge>(std::size_t nm)> pass2_extra_edges_builder;
+
                     // local edges of Pass 1 including the extra ones (for gadget_symmetries)
                     std::function<std::vector<Edge>(std::size_t nm)> gadget_edges_builder() const {
                         if (!pass1_extra_edges_builder) return local_edges_builder;
@@ -1219,6 +1223,10 @@ namespace nested_cycle_build {
                             }
                             std::vector<Edge> local_edges = constrained == 0 ? config_.gadget_edges_builder()(nm)
                                                                              : config_.local_edges_builder(nm);
+                            if (constrained == 1 && config_.pass2_extra_edges_builder) {
+                                const std::vector<Edge> x = config_.pass2_extra_edges_builder(nm);
+                                local_edges.insert(local_edges.end(), x.begin(), x.end());
+                            }
                             if (!config_.active_cycle.empty())
                                 for (Edge& le : local_edges)
                                     for (std::size_t i = 0; i < 2; ++i)
