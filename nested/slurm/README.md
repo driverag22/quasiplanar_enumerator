@@ -26,9 +26,12 @@ With these options: C12 depth 12 -> 876,629 prefixes, C14 depth 12 -> 877,520.
 
 ## 3. Pass 1 on the base drawing (job array)
 
-    sbatch --array=0-99 --time=7-00:00:00 \
+    sbatch --array=0-99 --time=04:00:00 \
       --export=ALL,BIN=.bin/split_c12_run1,RUN=c12_run1,TASKS=100,DEPTH=12,PASSES=1,REACH_EVERY_EDGE_FROM=1,FINAL_FACE_EVERY_EDGE_FROM=1,PLACEMENT_EVERY_EDGE_FROM=0,PLACEMENT_FILTER=1,PROGRESS_SECONDS=1800 \
       nested/slurm/search.slurm
+
+Keep the requests close to the real usage (level 0: at most ~35 min and ~155 MB per task): small jobs start
+sooner, and the per-user memory limit (128 GB) otherwise caps the number of tasks running at once.
 
 Task i searches below the prefixes j with j mod TASKS == i and writes `runs/c12_run1/t<i>/`:
 `children.jsonl` (intermediate drawings, deduplicated per task only), `done_units.txt` (finished prefixes),
