@@ -292,7 +292,12 @@ int saturate(int argc, char** argv) {
     config.run_pass1 = true;
     config.run_pass2 = false;
     config.split_export_children = false;
-    config.reserve_vertices = c + 1; // D3 and the outer star, so that no copy needs a JSON round trip
+    // SAT_CYCLES=4: four cycles D1..D4 (at every leaf a second Pass 1 adds the crossable D3, then Pass 2 the uncrossed
+    // D4), so that D2 and D3 are both middle cycles; default 3 (D1, D2, D3)
+    const std::size_t ncycles = std::getenv("SAT_CYCLES") ? std::stoul(std::getenv("SAT_CYCLES")) : 3;
+    if (ncycles != 3 && ncycles != 4) throw std::runtime_error("SAT_CYCLES must be 3 or 4");
+    // the later cycles and the outer star, so that no copy needs a JSON round trip
+    config.reserve_vertices = (ncycles - 2) * c + 1;
     fs::create_directories(config.output_dir);
     // STOP_ON_UNSATURATED=<marker file> (sweeps): stop at the first complete drawing that is not saturated and
     // append to the marker; a task whose marker already exists (another task of the same gadget stopped) skips
@@ -370,6 +375,148 @@ int saturate(int argc, char** argv) {
         catch (const std::exception& ex) { b << "exception: " << ex.what(); }
         if (a.str() != b.str()) { ++roundtrip_failed; std::cout << "ROUNDTRIP MISMATCH" << std::endl; }
     };
+    // a complete drawing with the cycles starting at starts[0] = 0 (D1), starts[1], ..., the last one uncrossed:
+    // outer star, saturation test, record
+    auto complete = [&](const Drawing<klim>& D, const std::vector<std::size_t>& starts) {
+        ++completions;
+        // exact copy; the last (reserved, still isolated) vertex becomes the outer star
+        Drawing<klim> E(D);
+        const std::size_t star = E.vertices.size() - 1;
+        if (E.vertices[star].halfedge) { ++errors; return; }
+        // outer face of the last cycle: bounded by exactly its c edges (all other vertices are on the other side)
+        std::vector<int> face;
+        const std::size_t nf = NestedCycleSearcher<klim>::label_faces(E, face);
+        std::vector<std::vector<HdsHalfedge*>> fh(nf);
+        for (auto& h : E.halfedges) fh[face[h.label]].push_back(&h);
+        const std::size_t k = starts.size(), nmB = starts.back();
+        auto inD3 = [&](std::size_t x) { return x >= nmB && x < nmB + c; };
+        HdsHalfedge* start = nullptr;
+        std::size_t outer = 0;
+        for (std::size_t f = 0; f < nf; ++f) {
+            bool only_d3 = fh[f].size() == c;
+            for (auto* h : fh[f]) only_d3 = only_d3 && inD3(h->edge->u) && inD3(h->edge->v);
+            if (only_d3) { ++outer; start = fh[f][0]; }
+        }
+        if (outer != 1) { ++errors; std::cerr << "outer face of the last cycle not unique: " << outer << std::endl; return; }
+        // uncrossable star in that face (as for the black regions of the reduction)
+        HdsHalfedge* j = start;
+        HdsHalfedge* x = E.add_edge(HdsPath({j, nullptr}), star, klim);
+        for (;;) {
+            j = j->next->twin->next;
+            if (j == start) break;
+            E.add_edge(HdsPath({j, x}), star, klim);
+        }
+        // missing edges: different cycles, or both in a middle cycle; pairs within the first / last cycle count as present
+        auto cycle_of = [&](std::size_t v) { int r = 0; for (std::size_t q = 0; q < k; ++q) if (v >= starts[q] && v < starts[q] + c) r = static_cast<int>(q) + 1; return r; };
+        auto pos_of = [&](std::size_t v) { return v - starts[cycle_of(v) - 1]; };
+        auto middle = [&](int cyc) { return cyc > 1 && cyc < static_cast<int>(k); };
+        std::set<std::pair<std::size_t, std::size_t>> adj;
+        for (const auto& e : D.edges) adj.insert({std::min(e.u, e.v), std::max(e.u, e.v)});
+        std::vector<std::size_t> verts;
+        for (std::size_t q = 0; q < k; ++q) for (std::size_t i = 0; i < c; ++i) verts.push_back(starts[q] + i);
+        std::sort(verts.begin(), verts.end());
+        nlohmann::json insertable = nlohmann::json::array();
+        for (std::size_t a = 0; a < verts.size(); ++a)
+            for (std::size_t b = a + 1; b < verts.size(); ++b) {
+                const std::size_t u = verts[a], v = verts[b];
+                const int cu = cycle_of(u), cv = cycle_of(v);
+                if (cu == cv && !middle(cu)) continue;
+                if (adj.count({u, v})) continue;
+                if (!E.first_path(u, v, 0).empty())
+                    insertable.push_back({cu, pos_of(u), cv, pos_of(v)});
+            }
+        if (check_roundtrip) roundtrip(E);
+        const IsoCode ecode = canonical_code_free(E);
+        if (!seen.insert(ecode).second) return;
+        ++distinct;
+        if (const std::string pr = drawing_problems(E); !pr.empty()) { ++errors; std::cerr << "complete drawing: " << pr << std::endl; }
+        if (!insertable.empty()) { // insert the first insertable edge into a copy and check the result as well
+            const auto& t = insertable[0];
+            auto label = [&](int cyc, std::size_t pos) { return starts[cyc - 1] + pos; };
+            const std::size_t u = label(t[0], t[1]), v = label(t[2], t[3]);
+            Drawing<klim> F(E);
+            F.add_edge(F.first_path(u, v, 0), v, 0);
+            if (const std::string pr = drawing_problems(F); !pr.empty()) { ++errors; std::cerr << "after insertion: " << pr << std::endl; }
+        }
+        if (insertable.empty()) ++saturated;
+        std::set<std::string> types;
+        for (const auto& t : insertable) types.insert("D" + std::to_string(t[0].get<int>()) + "-D" + std::to_string(t[2].get<int>()));
+        for (const auto& t : types) ++type_count[t];
+        // greedy augmentation: add insertable edges one at a time until none fits, braid edges (between consecutive
+        // cycles) first, then the others; a lower bound for the number of edges that fit simultaneously
+        Drawing<klim> G(E);
+        std::set<std::pair<std::size_t, std::size_t>> gadj = adj;
+        auto add_greedy = [&](bool braid_only) {
+            nlohmann::json added = nlohmann::json::array();
+            for (bool changed = true; changed;) {
+                changed = false;
+                for (std::size_t a = 0; a < verts.size(); ++a)
+                    for (std::size_t b = a + 1; b < verts.size(); ++b) {
+                        const std::size_t u = verts[a], v = verts[b];
+                        const int cu = cycle_of(u), cv = cycle_of(v);
+                        if (cu == cv && !middle(cu)) continue;
+                        const bool braid = cu - cv == 1 || cv - cu == 1;
+                        if (braid_only != braid) continue;
+                        if (gadj.count({u, v})) continue;
+                        HdsPath p = G.first_path(u, v, 0);
+                        if (p.empty()) continue;
+                        G.add_edge(p, v, 0);
+                        gadj.insert({u, v});
+                        added.push_back({cu, pos_of(u), cv, pos_of(v)});
+                        changed = true;
+                    }
+            }
+            return added;
+        };
+        const nlohmann::json added_braid = add_greedy(true);
+        const nlohmann::json added_other = add_greedy(false);
+        if (const std::string pr = drawing_problems(G); !pr.empty()) { ++errors; std::cerr << "after augmentation: " << pr << std::endl; }
+        max_braid = std::max<std::size_t>(max_braid, added_braid.size());
+        max_total = std::max<std::size_t>(max_total, added_braid.size() + added_other.size());
+
+        nlohmann::ordered_json rec;
+        rec["code_hash"] = std::to_string(IsoCodeHash()(ecode)); // for deduplication across tasks
+        rec["n_insertable"] = insertable.size();
+        rec["greedy_braid"] = added_braid;  // braid edges added together (greedy, in this order)
+        rec["greedy_other"] = added_other;  // then further edges (within middle cycles, between non-consecutive cycles)
+        rec["insertable"] = insertable; // [cycle, position, cycle, position], cycles 1 = D1, 2 = D2, ...
+        nlohmann::ordered_json labels;
+        for (std::size_t q = 0; q < k; ++q) labels["D" + std::to_string(q + 1)] = starts[q];
+        labels["outer_star"] = star;
+        rec["labels"] = labels;
+        rec["drawing"] = E.serialize_to_json();
+        out << rec.dump() << "\n";
+        out.flush();
+        // fail fast (sweeps): one drawing that is not saturated decides that the gadget is not maximal
+        if (stop_marker && !insertable.empty()) {
+            std::ofstream(stop_marker, std::ios::app) << "task " << config.task_index << "\n";
+            std::cout << "STOP: drawing with an insertable edge found (marker " << stop_marker << ")" << std::endl;
+            std::exit(0);
+        }
+    };
+    // Pass 2 on d: the uncrossed last cycle is attached to the cycle starting at starts.back()
+    auto run_pass2 = [&](const Drawing<klim>& d, std::vector<std::size_t> starts) {
+        auto cfg = make_config();
+        cfg.split_mode = true;
+        cfg.run_pass1 = false;
+        cfg.run_pass2 = true;
+        cfg.split_depth = 0;
+        cfg.task_index = 0;
+        cfg.task_count = 1;
+        cfg.input_drawing = &d;
+        if (const char* r = std::getenv("MCF_PRUNING")) cfg.enable_mcf_pruning = std::string(r) != "0";
+        cfg.split_files = false;
+        cfg.export_files = false;
+        for (std::size_t i = 0; i < c; ++i) cfg.active_cycle.push_back(starts.back() + i);
+        cfg.solution_callback = [&](const Drawing<klim>& D, std::size_t nmB) {
+            ++completions;
+            std::vector<std::size_t> all = starts;
+            all.push_back(nmB);
+            complete(D, all);
+        };
+        NestedCycleSearcher<klim>(cfg).run();
+    };
+    std::size_t inner_leaves = 0; // SAT_CYCLES=4: leaves of the second Pass 1
     config.leaf_callback = [&](const Drawing<klim>& d, std::size_t nmA, const IsoCode& code) {
         ++leaves;
         if (check_roundtrip) roundtrip(d);
@@ -382,131 +529,29 @@ int saturate(int argc, char** argv) {
         ++matching;
         if (filter) classes_reached.insert(fc->second);
         const std::size_t completions_before = completions;
-        auto cfg = make_config();
-        cfg.split_mode = true;
-        cfg.run_pass1 = false;
-        cfg.run_pass2 = true;
-        cfg.split_depth = 0;
-        cfg.task_index = 0;
-        cfg.task_count = 1;
-        cfg.input_drawing = &d;
-        if (const char* r = std::getenv("MCF_PRUNING")) cfg.enable_mcf_pruning = std::string(r) != "0";
-        cfg.split_files = false;
-        cfg.export_files = false;
-        for (std::size_t i = 0; i < c; ++i) cfg.active_cycle.push_back(nmA + i); // D3 is attached to D2
-        cfg.solution_callback = [&](const Drawing<klim>& D, std::size_t nmB) {
-            ++completions;
-            // exact copy; the last (reserved, still isolated) vertex becomes the outer star
-            Drawing<klim> E(D);
-            const std::size_t star = E.vertices.size() - 1;
-            if (E.vertices[star].halfedge) { ++errors; return; }
-            // outer face of D3: bounded by exactly the c edges of D3 (all other vertices are on the other side)
-            std::vector<int> face;
-            const std::size_t nf = NestedCycleSearcher<klim>::label_faces(E, face);
-            std::vector<std::vector<HdsHalfedge*>> fh(nf);
-            for (auto& h : E.halfedges) fh[face[h.label]].push_back(&h);
-            auto inD3 = [&](std::size_t x) { return x >= nmB && x < nmB + c; };
-            HdsHalfedge* start = nullptr;
-            std::size_t outer = 0;
-            for (std::size_t f = 0; f < nf; ++f) {
-                bool only_d3 = fh[f].size() == c;
-                for (auto* h : fh[f]) only_d3 = only_d3 && inD3(h->edge->u) && inD3(h->edge->v);
-                if (only_d3) { ++outer; start = fh[f][0]; }
-            }
-            if (outer != 1) { ++errors; std::cerr << "outer face of D3 not unique: " << outer << std::endl; return; }
-            // uncrossable star in that face (as for the black regions of the reduction)
-            HdsHalfedge* j = start;
-            HdsHalfedge* x = E.add_edge(HdsPath({j, nullptr}), star, klim);
-            for (;;) {
-                j = j->next->twin->next;
-                if (j == start) break;
-                E.add_edge(HdsPath({j, x}), star, klim);
-            }
-            // missing edges: different cycles, or both in D2; pairs within D1 / within D3 count as present
-            auto cycle_of = [&](std::size_t v) { return v < c ? 1 : (v >= nmA && v < nmA + c) ? 2 : 3; };
-            auto pos_of = [&](std::size_t v) { return v < c ? v : (v >= nmA && v < nmA + c) ? v - nmA : v - nmB; };
-            std::set<std::pair<std::size_t, std::size_t>> adj;
-            for (const auto& e : D.edges) adj.insert({std::min(e.u, e.v), std::max(e.u, e.v)});
-            std::vector<std::size_t> verts;
-            for (std::size_t i = 0; i < c; ++i) { verts.push_back(i); verts.push_back(nmA + i); verts.push_back(nmB + i); }
-            std::sort(verts.begin(), verts.end());
-            nlohmann::json insertable = nlohmann::json::array();
-            for (std::size_t a = 0; a < verts.size(); ++a)
-                for (std::size_t b = a + 1; b < verts.size(); ++b) {
-                    const std::size_t u = verts[a], v = verts[b];
-                    const int cu = cycle_of(u), cv = cycle_of(v);
-                    if (cu == cv && cu != 2) continue;
-                    if (adj.count({u, v})) continue;
-                    if (!E.first_path(u, v, 0).empty())
-                        insertable.push_back({cu, pos_of(u), cv, pos_of(v)});
-                }
-            if (check_roundtrip) roundtrip(E);
-            const IsoCode ecode = canonical_code_free(E);
-            if (!seen.insert(ecode).second) return;
-            ++distinct;
-            if (const std::string pr = drawing_problems(E); !pr.empty()) { ++errors; std::cerr << "complete drawing: " << pr << std::endl; }
-            if (!insertable.empty()) { // insert the first insertable edge into a copy and check the result as well
-                const auto& t = insertable[0];
-                auto label = [&](int cyc, std::size_t pos) { return cyc == 1 ? pos : cyc == 2 ? nmA + pos : nmB + pos; };
-                const std::size_t u = label(t[0], t[1]), v = label(t[2], t[3]);
-                Drawing<klim> F(E);
-                F.add_edge(F.first_path(u, v, 0), v, 0);
-                if (const std::string pr = drawing_problems(F); !pr.empty()) { ++errors; std::cerr << "after insertion: " << pr << std::endl; }
-            }
-            if (insertable.empty()) ++saturated;
-            std::set<std::string> types;
-            for (const auto& t : insertable) types.insert("D" + std::to_string(t[0].get<int>()) + "-D" + std::to_string(t[2].get<int>()));
-            for (const auto& t : types) ++type_count[t];
-            // greedy augmentation: add insertable edges one at a time until none fits, braid edges (D1-D2, D2-D3)
-            // first, then the others (D2-D2, D1-D3); a lower bound for the number of edges that fit simultaneously
-            Drawing<klim> G(E);
-            std::set<std::pair<std::size_t, std::size_t>> gadj = adj;
-            auto add_greedy = [&](bool braid_only) {
-                nlohmann::json added = nlohmann::json::array();
-                for (bool changed = true; changed;) {
-                    changed = false;
-                    for (std::size_t a = 0; a < verts.size(); ++a)
-                        for (std::size_t b = a + 1; b < verts.size(); ++b) {
-                            const std::size_t u = verts[a], v = verts[b];
-                            const int cu = cycle_of(u), cv = cycle_of(v);
-                            if (cu == cv && cu != 2) continue;
-                            const bool braid = (cu != cv) && (cu == 2 || cv == 2);
-                            if (braid_only != braid) continue;
-                            if (gadj.count({u, v})) continue;
-                            HdsPath p = G.first_path(u, v, 0);
-                            if (p.empty()) continue;
-                            G.add_edge(p, v, 0);
-                            gadj.insert({u, v});
-                            added.push_back({cu, pos_of(u), cv, pos_of(v)});
-                            changed = true;
-                        }
-                }
-                return added;
+        if (ncycles == 3) {
+            run_pass2(d, {0, nmA});
+        } else {
+            // second Pass 1: crossable D3 attached to D2 (from the reserved vertices), Pass 2 at each of its leaves
+            auto cfg = make_config();
+            apply_env_options(cfg);
+            cfg.split_mode = true;
+            cfg.run_pass1 = true;
+            cfg.run_pass2 = false;
+            cfg.split_depth = 0;
+            cfg.task_index = 0;
+            cfg.task_count = 1;
+            cfg.input_drawing = &d;
+            cfg.split_files = false;
+            cfg.export_files = false;
+            cfg.split_export_children = false;
+            for (std::size_t i = 0; i < c; ++i) cfg.active_cycle.push_back(nmA + i);
+            cfg.leaf_callback = [&](const Drawing<klim>& d2, std::size_t nmB, const IsoCode&) {
+                ++inner_leaves;
+                run_pass2(d2, {0, nmA, nmB});
             };
-            const nlohmann::json added_braid = add_greedy(true);
-            const nlohmann::json added_other = add_greedy(false);
-            if (const std::string pr = drawing_problems(G); !pr.empty()) { ++errors; std::cerr << "after augmentation: " << pr << std::endl; }
-            max_braid = std::max<std::size_t>(max_braid, added_braid.size());
-            max_total = std::max<std::size_t>(max_total, added_braid.size() + added_other.size());
-
-            nlohmann::ordered_json rec;
-            rec["code_hash"] = std::to_string(IsoCodeHash()(ecode)); // for deduplication across tasks
-            rec["n_insertable"] = insertable.size();
-            rec["greedy_braid"] = added_braid;  // braid edges added together (greedy, in this order)
-            rec["greedy_other"] = added_other;  // then further edges (D2-D2, D1-D3)
-            rec["insertable"] = insertable; // [cycle, position, cycle, position], cycles 1 = D1, 2 = D2, 3 = D3
-            rec["labels"] = {{"D1", 0}, {"D2", nmA}, {"D3", nmB}, {"outer_star", star}};
-            rec["drawing"] = E.serialize_to_json();
-            out << rec.dump() << "\n";
-            out.flush();
-            // fail fast (sweeps): one drawing that is not saturated decides that the gadget is not maximal
-            if (stop_marker && !insertable.empty()) {
-                std::ofstream(stop_marker, std::ios::app) << "task " << config.task_index << "\n";
-                std::cout << "STOP: drawing with an insertable edge found (marker " << stop_marker << ")" << std::endl;
-                std::exit(0);
-            }
-        };
-        NestedCycleSearcher<klim>(cfg).run();
+            NestedCycleSearcher<klim>(cfg).run();
+        }
         if (filter && completions > completions_before) classes_completed.insert(fc->second);
     };
 
@@ -574,6 +619,7 @@ int saturate(int argc, char** argv) {
         *o << "task " << config.task_index << "/" << config.task_count << ", split_depth " << config.split_depth
            << ", units " << result.split_units << ", time " << secs << "s\n"
            << "leaves (with potential final face): " << leaves << ", with finishable reduction: " << matching << "\n"
+           << "cycles: " << ncycles << (ncycles == 4 ? ", leaves of the second Pass 1: " + std::to_string(inner_leaves) : std::string()) << "\n"
            << "complete 3-cycle drawings: " << completions << ", distinct (this task): " << distinct
            << ", saturated: " << saturated << ", not saturated: " << distinct - saturated << ", errors: " << errors << "\n"
            << "finishable classes reached: " << classes_reached.size() << ", of which completed from the complete drawing: "
