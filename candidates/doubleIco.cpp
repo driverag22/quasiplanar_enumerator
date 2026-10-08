@@ -92,7 +92,6 @@ int main() {
 
     // Iterate through all drawings of K_6
     int idx = 0;
-    const std::chrono::duration<double> timePerIter = std::chrono::duration<double>(3600);
     for (const auto& item : all_edge_sets) {
         idx++;
         std::cout << "\rPermutation [" << idx << " / " << total_edge_sets << "], size (exp.43): " << item.edges.size() << std::flush;
