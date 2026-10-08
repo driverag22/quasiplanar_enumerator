@@ -38,6 +38,18 @@ For the first edge it contains the edge label and the two endpoints `u,v`. The f
 For subsequent edges it contains a unique label, the labels of edges it crosses, the endpoints `u` and `v`, and label of the edge it "starts after" in the counter-clockwise rotation around `u`.
 Note that therefore the start after edge is also incident on `u`, and is always drawn before the current edge `(u,v)`.
 
+The labels of crossed edges alone can be ambiguous, namely when a crossed edge (or the target vertex `v`) occurs more than once on the boundary of the current face.
+Therefore, for each crossed edge `crossed` gives a pair `[segment, side]`: the segment of the crossed edge that is crossed (counted from the crossed edge's own `u`, considering only crossings with previously drawn edges), and whether it is crossed coming from its `"left"` or `"right"` w.r.t. its own direction `u -> v`.
+Furthermore, `end_after_edge` gives the label of the edge it "ends after" in the rotation around `v` (omitted if `v` has no edges yet):
+
+```json
+{ "edge_label": 35, "u": 11, "v": 15, "start_after_edge": 11,
+  "crossed_edges": [24, 28, 31], "crossed": [[0, "right"], [1, "right"], [0, "left"]],
+  "end_after_edge": 34 }
+```
+
+Recipes without `crossed` and `end_after_edge` (files from before 10-2026) can still be read.
+
 This drawing_recipe follows the same order as the code itself when constructing a new drawing.
 
 The `kplane` and `num_vertices` of the drawing is also given. 

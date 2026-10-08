@@ -239,20 +239,31 @@ struct Drawing {
                 return false;
             };
 
-            // unambiguous format: segment and side of each crossing
-            // files pre 10-2026 may lack this
+            // unambiguous format: segment and side of each crossing, files pre 10-2026 may lack this
+            // crossed[i] = [segment, side] for the edge crossed_edges[i]
+            // (also read: objects {"edge", "segment", "side"}, written by a short-lived version)
             if (step.contains("crossed")) {
-                for (const auto& c : step["crossed"]) {
-                    auto cross_it = label_to_edge_map.find(c["edge"].get<std::size_t>());
+                const auto& pos = step["crossed"];
+                if (pos.size() != crossed.size())
+                    throw std::runtime_error("Deserialization error: crossed and crossed_edges differ in length at edge " +
+                            std::to_string(edge_label));
+                for (std::size_t i = 0; i < pos.size(); ++i) {
+                    const std::size_t crossed_label = crossed[i];
+                    const bool pair = pos[i].is_array();
+                    if (!pair && pos[i].contains("edge") && pos[i]["edge"].get<std::size_t>() != crossed_label)
+                        throw std::runtime_error("Deserialization error: crossed and crossed_edges disagree at edge " +
+                                std::to_string(edge_label));
+                    const std::size_t segment = pair ? pos[i][0].get<std::size_t>() : pos[i]["segment"].get<std::size_t>();
+                    const std::string side = pair ? pos[i][1].get<std::string>() : pos[i]["side"].get<std::string>();
+                    auto cross_it = label_to_edge_map.find(crossed_label);
                     if (cross_it == label_to_edge_map.end())
-                        throw std::runtime_error("Deserialization error: Crossed edge label " + c["edge"].dump() + " not mapped.");
-                    const std::string side = c["side"];
+                        throw std::runtime_error("Deserialization error: Crossed edge label " + std::to_string(crossed_label) + " not mapped.");
                     if (side != "left" && side != "right")
                         throw std::runtime_error("Deserialization error: side must be left or right, got " + side);
-                    HdsHalfedge* h = halfedge_at(cross_it->second, c["segment"].get<std::size_t>(), side == "left" ? 0 : 1);
+                    HdsHalfedge* h = halfedge_at(cross_it->second, segment, side == "left" ? 0 : 1);
                     if (!on_current_face(h))
-                        throw std::runtime_error("Deserialization error: crossing of edge " + c["edge"].dump() + " (segment " +
-                                c["segment"].dump() + ", " + side + ") is not on the current face boundary.");
+                        throw std::runtime_error("Deserialization error: crossing of edge " + std::to_string(crossed_label) + " (segment " +
+                                std::to_string(segment) + ", " + side + ") is not on the current face boundary.");
                     p.push_back(h);
                     face_runner = h->twin;
                 }
@@ -1090,7 +1101,7 @@ struct Drawing {
                 auto pos_arr = nlohmann::json::array();
                 for (std::size_t j = 1; j + 1 < edge.built.size(); ++j) {
                     const auto c = crossing_at_insertion(edge, edge.built[j]);
-                    pos_arr.push_back({{"edge", edge.built[j]->edge->label}, {"segment", c.first}, {"side", c.second == 0 ? "left" : "right"}});
+                    pos_arr.push_back(nlohmann::json::array({c.first, c.second == 0 ? "left" : "right"})); // [segment, side]
                 }
                 step["crossed"] = pos_arr;
                 // built.back() points to v, the new edge comes right after its edge in the rotation at v
