@@ -5,16 +5,18 @@
 typedef std::vector<std::size_t> Edge;
 typedef std::vector<Edge> Edges;
 
-Edges generateCompleteGraph(std::size_t n) {
-    Edges edges;
-    edges.reserve(n * (n - 1) / 2);
-    for (std::size_t i = 0; i < n; ++i) {
-        for (std::size_t j = i + 1; j < n; ++j) {
-            edges.push_back({i, j});
-        }
-    }
-    return edges;
-}
+const Edges edges = 
+{
+    {0,1},{0,2},{0,3},{0,4},{0,5},{0,6},{0,7},{0,8},{0,9},
+    {1,2},{1,3},{1,4},{1,5},{1,6},{1,7},{1,8},{1,9},
+    {2,3},{2,4},{2,5},{2,6},{2,7},{2,8},{2,9},
+    {3,4},{3,5},{3,6},{3,7},{3,8},{3,9},
+    {4,5},{4,6},{4,7},{4,8},{4,9},
+    {5,6},{5,7},{5,8},{5,9},
+    {6,7},{6,8},{6,9},
+    {7,8},{7,9},
+    {8,9},
+};
 
 const std::size_t n = 10;
 const std::size_t klim = 13;
@@ -22,7 +24,6 @@ const std::size_t klim = 13;
 int main() {
     std::cout << "\n\n ===================================================== \n";
     std::cout << "k = " << klim << ", n = " << n << std::endl;
-    const Edges edges = generateCompleteGraph(n);
     std::vector< Drawing<klim> > solutions;
     std::vector<std::size_t> d_cnt; // d_cnt[i]: number of further drawings found isomorphic to solutions[i]
     std::size_t minimal_cr = SIZE_MAX;
@@ -32,9 +33,7 @@ int main() {
     d.add_first_edge(edges[0][0], edges[0][1]);
     for (std::size_t i = 1; i < n-1; ++i) {
         HdsPath p = d.first_path(edges[i][0], edges[i][1]);
-        if (p.empty()) {
-            throw std::runtime_error("Failed to build the initial star!");
-        }
+        if (p.empty()) throw std::runtime_error("Failed to build the initial star!");
         d.add_edge(p, edges[i][1]);
     }
     std::cout << "Star built" << std::endl;
@@ -55,9 +54,7 @@ BACKUP:
                 --e;
 
                 u = (*e)[0];
-                assert(u == d.edges.back().u);
                 v = (*e)[1];
-                assert(v == d.edges.back().v);
                 p = d.edges.back().built;
                 d.remove_edge();
             } while (!d.next_path(p, v));
@@ -86,7 +83,7 @@ BACKUP:
         }
     }
 END:
-    if(solutions.size() == 0) return 0;
+    if(counter == 0) return 0;
 
     // std::size_t idx = 0;
     // for (auto it = solutions.begin();it!=solutions.end();it++) {
