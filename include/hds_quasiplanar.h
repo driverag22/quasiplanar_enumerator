@@ -616,11 +616,9 @@ struct Drawing {
         // cross_mat cleanup
         std::size_t removed_label = edges.back().label;
         std::bitset<MAX_EDGES> crossed = cross_mat[removed_label];
-        for (std::size_t b = 0; b < MAX_EDGES; ++b) { // hard-coded 96 edge limit
-            if (crossed.test(b)) {
+        for (std::size_t b = 0; b < MAX_EDGES; ++b) // hard-coded 96 edge limit
+            if (crossed.test(b))
                 cross_mat[b].reset(removed_label);
-            }
-        }
         cross_mat[removed_label].reset(); // wipe the removed edge's row
 
         HdsPath p = edges.back().built;
@@ -664,37 +662,19 @@ struct Drawing {
         // walk p.back() around its face
         std::size_t i = p.size()-1;
         HdsHalfedge* end = (i == 1 ? p[0] : p[i-1]->twin);
-        std::bitset<kplane+1> jumped;
 
         for (;;) {
             p[i] = p[i]->next;
-            jumped.reset();
 
             // avoid self-cross
-            bool changed = true;
+            for (std::size_t x = i - 1; x > 0; --x) {
+                HdsHalfedge* v_start = (x == 1) ? p[0] : p[x-1]->twin;
+                HdsHalfedge* v_end = p[x];
 
-            while (changed && i > 1) {
-                changed = false;
-
-                for (std::size_t x = i - 1; x > 0; --x) {
-                    if (jumped[x] == 1) continue;
-
-                    HdsHalfedge* v_start = (x == 1) ? p[0] : p[x-1]->twin;
-                    HdsHalfedge* v_end = p[x];
-
-                    // if we reach earlier segment of current edge, we follow it and mark it as jumped
-                    if (p[i] == v_end) { 
-                        p[i] = v_start; 
-                        jumped[x] = 1;
-                        changed = true; 
-                        break;
-                    } else if (p[i] == v_start) { 
-                        p[i] = v_end; 
-                        jumped[x] = 1;
-                        changed = true; 
-                        break;
-                    }
-                }
+                // if we reach an earlier segment of the current edge, we follow it to its other end;
+                // no half-edge ends two segments (no edge is crossed twice), so at most one jump per step
+                if (p[i] == v_end) { p[i] = v_start; break; }
+                if (p[i] == v_start) { p[i] = v_end; break; }
             }
 
             if (p[i] == end) 
@@ -712,36 +692,18 @@ struct Drawing {
         std::size_t u = p[0]->vertex->label;
         HdsHalfedge* stop_condition = (ci == 1) ? p[0] : p[ci-1]->twin;
 
-        std::bitset<kplane> jumped;
         for (;;) {
             p[ci] = p[ci]->next;
-            jumped.reset();
 
             // "virtual" face boundaries (self-cross)
-            bool changed = true;
+            for (std::size_t x = ci - 1; x > 0; --x) {
+                HdsHalfedge* v_start = (x == 1) ? p[0] : p[x-1]->twin;
+                HdsHalfedge* v_end = p[x];
 
-            while (changed && ci > 1) {
-                changed = false;
-
-                for (std::size_t x = ci - 1; x > 0; --x) {
-                    if (jumped[x] == 1) continue;
-
-                    HdsHalfedge* v_start = (x == 1) ? p[0] : p[x-1]->twin;
-                    HdsHalfedge* v_end = p[x];
-
-                    // if we reach earlier segment of current edge, we follow it and mark it as jumped
-                    if (p[ci] == v_end) { 
-                        p[ci] = v_start; 
-                        jumped[x] = 1; // mark as jumped to avoid infinite looping
-                        changed = true; 
-                        break;
-                    } else if (p[ci] == v_start) { 
-                        p[ci] = v_end; 
-                        jumped[x] = 1;
-                        changed = true; 
-                        break;
-                    }
-                }
+                // if we reach an earlier segment of the current edge, we follow it to its other end;
+                // no half-edge ends two segments (no edge is crossed twice), so at most one jump per step
+                if (p[ci] == v_end) { p[ci] = v_start; break; }
+                if (p[ci] == v_start) { p[ci] = v_end; break; }
             }
 
             if (p[ci] == stop_condition) break;
