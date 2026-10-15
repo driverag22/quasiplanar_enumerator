@@ -1,7 +1,11 @@
 #ifndef ISO_HPP
 #define ISO_HPP
 
+// works with any Drawing header: include the one you want before iso.h
+// (including another one afterwards is a compile error, see HDS_DRAWING_H)
+#ifndef HDS_DRAWING_H
 #include "hds_quasiplanar.h"
+#endif
 #include <vector>
 #include <stdexcept>
 #include <queue>

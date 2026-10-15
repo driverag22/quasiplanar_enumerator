@@ -94,7 +94,7 @@ int main() {
     int idx = 0;
     for (const auto& item : all_edge_sets) {
         idx++;
-        std::cout << "\rPermutation [" << idx << " / " << total_edge_sets << "], size (exp.43): " << item.edges.size() << std::flush;
+        std::cout << "\rPermutation [" << idx << " / " << total_edge_sets << "], size: " << item.edges.size() << std::flush;
         for (int i = 0; i < 63; i++) {
             auto start_time = std::chrono::steady_clock::now();
             std::cout << "Drawing " << std::to_string(i) << std::endl;
@@ -120,7 +120,7 @@ int main() {
             for (auto e = start_edge;;) {
                 if (std::chrono::steady_clock::now() - start_time > std::chrono::hours(1)) {
                     std::cout << "Permutation "  << idx << " drawing " << i << " exceeded 1 hour limit. Skipping remainder.\n";
-                    continue;
+                    goto NEXT_ITEM;
                 }
                 std::size_t u = (*e)[0];
                 std::size_t v = (*e)[1];
@@ -128,6 +128,7 @@ int main() {
 
                 if (p.empty()) {
                     // Backtrack
+BACKUP:
                     do {
                         if (e == start_edge) {
                             goto NEXT_ITEM; // Fail this permutation, try the next edge set
@@ -151,7 +152,7 @@ int main() {
                         std::cout << "extensible\n";
                         return 0;
                     }
-                    goto NEXT_ITEM;
+                    goto BACKUP; // continue with the next drawing
                 }
             }
 NEXT_ITEM:;

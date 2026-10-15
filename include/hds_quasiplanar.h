@@ -1,5 +1,10 @@
-#ifndef HDS_HPP
-#define HDS_HPP
+#ifndef HDS_QUASIPLANAR_H
+#define HDS_QUASIPLANAR_H
+// all Drawing headers define the same names, so a translation unit may use only one
+#ifdef HDS_DRAWING_H
+#error "only one hds_*.h Drawing header per translation unit"
+#endif
+#define HDS_DRAWING_H
 #include <vector>
 #include <bitset>
 #include <map>
@@ -143,14 +148,25 @@ struct Drawing {
         cross_mat(d.cross_mat) {
         // build indices
         std::vector<HdsHalfedge*> ind(halfedges.size());
-        for (auto i = halfedges.begin(); i != halfedges.end(); ++i) 
+        for (auto i = halfedges.begin(); i != halfedges.end(); ++i) {
+            if (i->label >= ind.size())
+                throw std::runtime_error("halfedge label too large");
             ind[i->label] = &*i;
+        }
         std::vector<HdsEdge*> ind_e(edges.size());
-        for (auto i = edges.begin(); i != edges.end(); ++i) 
+        for (auto i = edges.begin(); i != edges.end(); ++i) {
+            if (i->label >= ind_e.size())
+                throw std::runtime_error("edge label too large");
             ind_e[i->label] = &*i;
+        }
         std::vector<HdsVertex*> ind_c(crossings.size());
-        for (auto i = crossings.begin(); i != crossings.end(); ++i) 
+        for (auto i = crossings.begin(); i != crossings.end(); ++i) {
+            if (i->label < vertices.size())
+                throw std::runtime_error("crossing label too small");
+            if (i->label - vertices.size() >= ind_c.size())
+                throw std::runtime_error("crossing label too large");
             ind_c[i->label - vertices.size()] = &*i;
+        }
 
         // fix pointers
         for (std::size_t i = 0; i < vertices.size(); ++i) {
@@ -195,9 +211,9 @@ struct Drawing {
 
         int json_kplane = root["kplane"];
         if (json_kplane > kplane) {
-            throw std::runtime_error("Deserialization Constructor Error: Compile-time kplane (" + 
-                    std::to_string(kplane) + ") is strictly larger than JSON kplane (" + 
-                    std::to_string(json_kplane) + ").");
+            throw std::runtime_error("Deserialization Constructor Error: JSON kplane (" +
+                    std::to_string(json_kplane) + ") exceeds compile-time kplane (" +
+                    std::to_string(kplane) + ").");
         }
 
         std::size_t num_v = root["num_vertices"];
@@ -215,10 +231,15 @@ struct Drawing {
             std::size_t u = step["u"].get<std::size_t>();
             std::size_t v = step["v"].get<std::size_t>();
             std::size_t edge_label = step["edge_label"].get<std::size_t>();
+            if (u >= vertices.size() || v >= vertices.size() || u == v)
+                throw std::runtime_error("Deserialization error: invalid edge " + std::to_string(u) +
+                        "-" + std::to_string(v) + " for " + std::to_string(vertices.size()) + " vertices.");
+            // prescribed (artificial) crossings, absent in older files
+            std::size_t pcr = step.contains("pcr") ? step["pcr"].get<std::size_t>() : 0;
 
             // first edge
             if (edge_label == 0) {
-                add_first_edge(u, v);
+                add_first_edge(u, v, pcr);
                 label_to_edge_map[edge_label] = &(edges.back());
                 continue;
             }
@@ -351,7 +372,7 @@ struct Drawing {
                 p.push_back(found_target);
             }
 
-            add_edge(p, v, 0);
+            add_edge(p, v, pcr);
             label_to_edge_map[edge_label] = &(edges.back());
         }
     }
@@ -565,10 +586,26 @@ struct Drawing {
     HdsHalfedge* add_edge(const HdsPath& p,
             std::size_t v,
             std::size_t pcr = 0) {
-        if (p.size() > 2 + pcr + kplane)
-            throw std::runtime_error("inserting an edge with too many crossings");
         if (p.size() < 2) 
             throw std::runtime_error("edge not properly described");
+        // the new edge ends with ncr = pcr + p.size()-2
+        if (p.size() - 2 + pcr > static_cast<std::size_t>(kplane))
+            throw std::runtime_error("inserting an edge with too many crossings");
+        // check everything split_edge and the target step would reject before
+        // changing anything, so that a throw leaves the drawing untouched
+        for (std::size_t i = 1; i + 1 < p.size(); ++i) {
+            if (p[i] == 0)
+                throw std::runtime_error("edge not properly described");
+            std::size_t times = 1; // how often this path crosses p[i]'s edge
+            for (std::size_t j = 1; j < i; ++j)
+                if (p[j]->edge == p[i]->edge) ++times;
+            if (p[i]->edge->ncr + times > static_cast<std::size_t>(kplane))
+                throw std::runtime_error("too many crossings per edge");
+        }
+        if (v >= vertices.size())
+            throw std::runtime_error("target vertex out of range");
+        if (p.back() == 0 && vertices[v].halfedge != 0)
+            throw std::runtime_error("vertex is already present");
         //std::cerr << "add: " << p[0]->vertex->label << ">" << v << " (cr = "
         // << pcr << ")" << std::endl;
         edges.emplace_back(p[0]->vertex->label, v, p, pcr, edges.size());
@@ -613,7 +650,13 @@ struct Drawing {
 
     // remove the last edge (i.e., the edge that was inserted last)
     void remove_edge() {
-        // cross_mat cleanup
+        HdsPath p = edges.back().built;
+        if (p.size() < 2)
+            throw std::runtime_error("no creation path");
+        if (p[0]->next->edge != &(edges.back()))
+            throw std::runtime_error("creation path mismatch");
+
+        // cross_mat cleanup (after the checks, so a throw leaves it consistent)
         std::size_t removed_label = edges.back().label;
         std::bitset<MAX_EDGES> crossed = cross_mat[removed_label];
         for (std::size_t b = 0; b < MAX_EDGES; ++b) // hard-coded 96 edge limit
@@ -621,11 +664,6 @@ struct Drawing {
                 cross_mat[b].reset(removed_label);
         cross_mat[removed_label].reset(); // wipe the removed edge's row
 
-        HdsPath p = edges.back().built;
-        if (p.size() < 2) 
-            throw std::runtime_error("no creation path");
-        if (p[0]->next->edge != &(edges.back()))
-            throw std::runtime_error("creation path mismatch");
         HdsVertex* v = p.back()->vertex;
         if (v->halfedge->next == v->halfedge->twin) 
             // this is the only edge incident to v
@@ -874,6 +912,8 @@ struct Drawing {
             std::size_t u = step["u"].get<std::size_t>() + vertex_shift;
             std::size_t v = step["v"].get<std::size_t>() + vertex_shift;
             std::size_t edge_label = step["edge_label"].get<std::size_t>() + edge_shift;
+            if (u >= vertices.size() || v >= vertices.size() || u == v) return false;
+            std::size_t pcr = step.contains("pcr") ? step["pcr"].get<std::size_t>() : 0;
 
             // first edge of the recipe, anchor using first_edge_anchor
             if (edge_label == edge_shift) {
@@ -883,7 +923,7 @@ struct Drawing {
                 p.push_back(first_edge_anchor);
                 p.push_back(nullptr); // target vertex is currently isolated
 
-                add_edge(p, v, 0);
+                add_edge(p, v, pcr);
                 local_label_to_edge_map[edge_label] = &(edges.back());
                 continue;
             }
@@ -991,7 +1031,7 @@ struct Drawing {
                 p.push_back(found_target);
             }
 
-            add_edge(p, v, 0);
+            add_edge(p, v, pcr);
             local_label_to_edge_map[edge_label] = &(edges.back());
         }
         return true;
@@ -1140,20 +1180,21 @@ struct Drawing {
         std::vector<const HdsHalfedge*> ind(halfedges.size());
         std::size_t count = 0;
         for (auto i = halfedges.begin(); i != halfedges.end(); ++i) {
-            ind[i->label] = &*i;
             if (i->label != count++) return false;
+            ind[i->label] = &*i;
         }
         std::vector<const HdsEdge*> ind_e(edges.size());
         count = 0;
         for (auto i = edges.begin(); i != edges.end(); ++i) {
-            ind_e[i->label] = &*i;
             if (i->label != count++) return false;
+            ind_e[i->label] = &*i;
         }
         std::vector<const HdsVertex*> ind_c(crossings.size());
         count = 0;
         for (auto i = crossings.begin(); i != crossings.end(); ++i) {
-            ind_c[i->label - vertices.size()] = &*i;
+            if (i->label < vertices.size()) return false;
             if (i->label - vertices.size() != count++) return false;
+            ind_c[i->label - vertices.size()] = &*i;
         }
         count = 0;
         for (auto i = halfedges.begin(); i != halfedges.end(); ++i) {
@@ -1191,17 +1232,15 @@ struct Drawing {
             if (i->vertex->label != u) continue;
             std::size_t v = i->edge->v;
             std::size_t iel = i->edge->label;
+            // follow the edge straight through its crossings (at most kplane) to v
             auto e = i->twin;
-            if (e->edge->label != iel) return false;
-            if (e->vertex->label == v) continue;
-            if (e->vertex->label < vertices.size()) return false;
-            e = e->next->twin->next;
-            if (e->edge->label != iel) return false;
-            if (e->vertex->label == v) continue;
-            if (e->vertex->label < vertices.size()) return false;
-            e = e->next->twin->next;
-            if (e->edge->label != iel) return false;
-            if (e->vertex->label != v) return false;
+            for (std::size_t cr = 0;; ++cr) {
+                if (e->edge->label != iel) return false;
+                if (e->vertex->label == v) break;
+                if (e->vertex->label < vertices.size()) return false;
+                if (cr == static_cast<std::size_t>(kplane)) return false;
+                e = e->next->twin->next;
+            }
         }
         return true;
     }
@@ -1303,7 +1342,15 @@ struct Drawing {
                 if (!adj[u][v]) missing.push_back({u, v});
 
         for (const auto& [u, v] : missing) {
-            HdsPath p = first_path(u, v);
+            // first_path can't start at an isolated vertex: start from the other end,
+            // and two isolated vertices can always be joined without crossings
+            bool u_isolated = (vertices[u].halfedge == 0);
+            bool v_isolated = (vertices[v].halfedge == 0);
+            if (u_isolated && v_isolated) {
+                std::cout << "Edge: " << u << " , " << v << "\n";
+                return true;
+            }
+            HdsPath p = u_isolated ? first_path(v, u) : first_path(u, v);
 
             if (!p.empty()) {
                 std::cout << "Edge: " << u << " , " << v << "\n";
@@ -1328,11 +1375,24 @@ struct Drawing {
     nlohmann::json extract_drawing_recipe() const {
         nlohmann::json j_recipe = nlohmann::json::array();
 
+        // ncr = pcr + own crossings + crossings by other edges; the recipe only rebuilds the
+        // latter two, so store the prescribed (artificial) part pcr explicitly if nonzero
+        std::map<std::size_t, std::size_t> crossed_by_others;
+        for (const auto& edge : edges)
+            for (std::size_t j = 1; j + 1 < edge.built.size(); ++j)
+                if (edge.built[j] != nullptr && edge.built[j]->edge != nullptr)
+                    ++crossed_by_others[edge.built[j]->edge->label];
+
         for (const auto& edge : edges) {
             nlohmann::json step;
             step["edge_label"] = edge.label;
             step["u"] = edge.u;
             step["v"] = edge.v;
+
+            std::size_t real = (edge.built.size() >= 2 ? edge.built.size() - 2 : 0) + crossed_by_others[edge.label];
+            if (edge.ncr < real)
+                throw std::runtime_error("Inconsistent crossing count at edge " + std::to_string(edge.label));
+            if (edge.ncr > real) step["pcr"] = edge.ncr - real;
 
             if (edge.label != 0) {
                 // edge.built[0] points to the halfedge we insert after clockwise
