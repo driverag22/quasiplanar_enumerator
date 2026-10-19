@@ -169,7 +169,7 @@ int main() {
     std::cout << "Drawings found: " << total << ", extensible: " << extensible << std::endl;
     std::cout << classes.size() << " drawings of G+u up to isomorphism:" << std::endl;
     for (std::size_t c = 0; c < classes.size(); ++c) {
-        const std::string name = "k10_plus4_u_" + std::to_string(c + 1);
+        const std::string name = "../quasiDrawings/K10_plus4/u/k10_plus4_u_" + std::to_string(c + 1);
         save(classes[c], name);
         std::cout << "  class " << c + 1 << " (saved as " << name << "): " << class_size[c] << " drawings, from K10 drawing(s)";
         for (int i : class_origin[c]) std::cout << " " << i;
