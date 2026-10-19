@@ -1,0 +1,10 @@
+copy 1 = H1s0: 8 drawings of two copies, 32 of three copies
+copy 1 = H1s1: 0 drawings of two copies, 0 of three copies
+copy 1 = H2s0: 8 drawings of two copies, 32 of three copies
+copy 1 = H2s1: 0 drawings of two copies, 0 of three copies
+copy 1 = H3s0: 8 drawings of two copies, 32 of three copies
+copy 1 = H3s1: 0 drawings of two copies, 0 of three copies
+copy 1 = H4s0: 8 drawings of two copies, 32 of three copies
+copy 1 = H4s1: 0 drawings of two copies, 0 of three copies
+two copies: 32 drawings, extensible 0
+three copies: 128 drawings, extensible 0
