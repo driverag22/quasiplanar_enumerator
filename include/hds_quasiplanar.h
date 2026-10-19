@@ -1445,7 +1445,12 @@ struct Drawing {
     std::list<HdsHalfedge> halfedges;
     std::list<HdsEdge> edges;
 
-    inline static constexpr std::size_t MAX_EDGES = 96;
+    // maximal number of edges (size of the crossing matrix); a program with larger drawings can raise it by
+    // defining HDS_MAX_EDGES before including this header
+#ifndef HDS_MAX_EDGES
+#define HDS_MAX_EDGES 96
+#endif
+    inline static constexpr std::size_t MAX_EDGES = HDS_MAX_EDGES;
     std::vector<std::bitset<MAX_EDGES>> cross_mat; // edge crossing matrix, assumes at most 64 edges
 }
 ;
