@@ -42,4 +42,11 @@ NestedCycleSearcher<klim>::Config make_config() {
     return config;
 }
 
+// no extra edge classes for C14 (see iterative_nested_c12_split.cpp)
+void configure_layer(NestedCycleSearcher<klim>::Config&, const std::string& braid, const std::string& chord,
+        const std::string& jump, bool) {
+    if ((!braid.empty() && braid != "-") || (!chord.empty() && chord != "-") || (!jump.empty() && jump != "-"))
+        throw std::runtime_error("configure_layer: no extra edge classes for C14");
+}
+
 #include "split_driver.h"

@@ -3,14 +3,14 @@
 # Submit from the repo root, e.g.
 #   sbatch --array=0-99 --time=04:00:00 \
 #     --export=ALL,BIN=.bin/split_c12_run1,RUN=c12_run1,TASKS=100,DEPTH=12,PASSES=1,REACH_EVERY_EDGE_FROM=1,FINAL_FACE_EVERY_EDGE_FROM=1,PLACEMENT_EVERY_EDGE_FROM=0,PLACEMENT_FILTER=1,PROGRESS_SECONDS=1800 \
-#     nested/slurm/search.slurm
+#     nested/exploration/slurm/search.slurm
 # Variables:
 #   BIN     binary (use a frozen copy per run, all tasks and resubmissions must use the same one)
 #   RUN     run name, output in $OUT/$RUN/t<task> (OUT defaults to runs)
 #   TASKS   number of tasks (= array size), DEPTH split depth, PASSES 1, 2 or 12
 #   PARENTS optional parents file (default: the base drawing)
 #   search options (REACH_EVERY_EDGE_FROM, ...) are read from the environment by the program,
-#   see nested/split_driver.h; they must be the same for all tasks of a run
+#   see nested/exploration/split_driver.h; they must be the same for all tasks of a run
 #SBATCH --job-name=nested_split
 #SBATCH --output=logs/%x_%A_%a.log
 #SBATCH --error=logs/%x_%A_%a.err

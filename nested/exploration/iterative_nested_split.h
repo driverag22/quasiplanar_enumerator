@@ -7,6 +7,7 @@
 #include <vector>
 #include <deque>
 #include <fstream>
+#include <filesystem>
 #include <cassert>
 #include <algorithm>
 #include <chrono>
@@ -116,6 +117,24 @@ namespace nested_cycle_build {
     struct IsoCodeHash {
         std::size_t operator()(const IsoCode& c) const { return boost::hash_range(c.begin(), c.end()); }
     };
+
+    // A kill (time limit) may cut off the last line of an append-only output file. Removes such a cut-off line, so
+    // that the next run of the task starts on a fresh line (a cut-off line would otherwise be glued to the next
+    // record, e.g. two unit numbers in done_units.txt to a wrong one). The record of a cut-off line is written again
+    // by the next run, since its unit was not finished.
+    inline void drop_partial_line(const std::string& path) {
+        std::ifstream f(path, std::ios::ate | std::ios::binary);
+        if (!f) return;
+        const std::streamoff size = f.tellg();
+        std::streamoff keep = size; // length up to and including the last '\n'
+        while (keep > 0) {
+            f.seekg(keep - 1);
+            if (f.get() == '\n') break;
+            --keep;
+        }
+        f.close();
+        if (keep < size) std::filesystem::resize_file(path, static_cast<std::uintmax_t>(keep));
+    }
 
     // All rotations/reflections sym of the old cycle 0,...,c-1 such that relabelling the old
     // endpoints by sym and the new cycle by some rotation/reflection maps the local edge set
@@ -530,6 +549,12 @@ namespace nested_cycle_build {
                     // optional extra local edges added in Pass 2 only, after the local edges (e.g. braid edges in
                     // every other layer only). Not part of the gadget symmetries (those are used in Pass 1).
                     std::function<std::vector<Edge>(std::size_t nm)> pass2_extra_edges_builder;
+
+                    // optional jump edges, added in both passes after all other local edges: from the cycle below the
+                    // parent's active cycle to the new cycle, written as {cycle_size + i, nm + j} and attached to
+                    // active_cycle[cycle_size + i] (active_cycle must list that cycle after the active one). Not part
+                    // of the gadget symmetries: the reduced drawings (and their codes) forget the cycle below.
+                    std::function<std::vector<Edge>(std::size_t nm)> jump_edges_builder;
 
                     // local edges of Pass 1 including the extra ones (for gadget_symmetries)
                     std::function<std::vector<Edge>(std::size_t nm)> gadget_edges_builder() const {
@@ -1101,17 +1126,13 @@ namespace nested_cycle_build {
 
                     // resuming: units completed by an earlier (killed) run of this task are listed in
                     // output_dir/done_units.txt and skipped; new children are appended to children.jsonl
-                    // (a line cut off by a kill is skipped by the merge)
+                    // (lines cut off by a kill are removed first)
                     std::set<std::size_t> done_units;
                     if (config_.split_mode && config_.split_files) {
+                        for (const char* f : {"/done_units.txt", "/children.jsonl", "/extensible.txt", "/solutions.jsonl"})
+                            drop_partial_line(config_.output_dir + f);
                         std::ifstream in(config_.output_dir + "/done_units.txt");
                         for (std::size_t u; in >> u;) done_units.insert(u);
-                        // a kill may have cut off the last child line: start new children on a fresh line
-                        std::ifstream ch(config_.output_dir + "/children.jsonl", std::ios::ate | std::ios::binary);
-                        if (ch && ch.tellg() > 0) {
-                            ch.seekg(-1, std::ios::end);
-                            if (ch.get() != '\n') std::ofstream(config_.output_dir + "/children.jsonl", std::ios::app) << "\n";
-                        }
                     }
                     auto owns = [&](std::size_t u) {
                         return config_.task_count != 0 && u % config_.task_count == config_.task_index
@@ -1225,6 +1246,10 @@ namespace nested_cycle_build {
                                                                              : config_.local_edges_builder(nm);
                             if (constrained == 1 && config_.pass2_extra_edges_builder) {
                                 const std::vector<Edge> x = config_.pass2_extra_edges_builder(nm);
+                                local_edges.insert(local_edges.end(), x.begin(), x.end());
+                            }
+                            if (config_.jump_edges_builder) {
+                                const std::vector<Edge> x = config_.jump_edges_builder(nm);
                                 local_edges.insert(local_edges.end(), x.begin(), x.end());
                             }
                             if (!config_.active_cycle.empty())

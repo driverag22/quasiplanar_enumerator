@@ -2,7 +2,7 @@
 # After a Pass 1 array: merge its children, run Pass 2 on the base drawing and on all intermediate drawings,
 # dedup the final drawings and count the intermediate drawings that can be finished.
 # Submit from the repo root, after the array (job id J):
-#   sbatch --dependency=afterany:J --export=ALL,BIN=.bin/split_c12_run1,RUN=c12_run1,EXPECTED=876629,ARRAY=J nested/slurm/post.slurm
+#   sbatch --dependency=afterany:J --export=ALL,BIN=.bin/split_c12_run1,RUN=c12_run1,EXPECTED=876629,ARRAY=J nested/exploration/slurm/post.slurm
 # Variables: BIN (same binary as the array), RUN, OUT (default runs), EXPECTED (number of prefixes, from
 #   "BIN count DEPTH 1" with the same options, or auto (needs ARRAY); the script stops if Pass 1 is not
 #   complete), ARRAY (job id of the array; optional, enables the check that all tasks numbered the prefixes alike)

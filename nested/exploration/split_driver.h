@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <functional>
 #include <map>
 #include <optional>
 #include <set>
@@ -119,6 +120,7 @@ int merge(int argc, char** argv) {
     std::unordered_map<IsoCode, std::size_t, IsoCodeHash> seen;
     std::set<std::string> extensible;
     std::ofstream parents(out / "parents.jsonl");
+    std::ofstream origins(out / "origins.txt"); // <line in parents.jsonl (0-based)> <parent of a child>
     std::size_t total = 0, broken = 0;
 
     for (int i = 3; i < argc; ++i) {
@@ -132,7 +134,10 @@ int merge(int argc, char** argv) {
             catch (const nlohmann::json::parse_error&) { ++broken; continue; } // cut off by a kill
             Drawing<klim> d(j);
             ++total;
-            if (!seen.emplace(canonical_code(d, syms), seen.size()).second) continue;
+            const auto [it, is_new] = seen.emplace(canonical_code(d, syms), seen.size());
+            if (j.contains("meta") && j["meta"].contains("parent")) // which parents each drawing comes from
+                origins << it->second << "\t" << j["meta"]["parent"].get<std::string>() << "\n";
+            if (!is_new) continue;
             parents << d.serialize_to_json().dump() << "\n";
         }
         if (fs::exists(dir / "extensible.txt"))
@@ -283,6 +288,49 @@ int saturate(int argc, char** argv) {
     auto config = make_config();
     apply_env_options(config);
     const std::size_t c = config.cycle_size;
+    // number of cycles and extra edges per level:
+    //   SAT_LAYERS="L1;...;L(k-1)" (braid classes of the layer Dj-D(j+1), "-" = matching only) and
+    //   SAT_CHORDS="c2;...;c(k-1)" (chord classes of the middle cycles, default none): k cycles, via the gadget's
+    //   configure_layer; the EXTRA_* options must not be set then.
+    //   SAT_JUMPS="j3;...;jk" (with SAT_LAYERS, default none): jump classes d:p[:s] = edges from vertex i of D(j-2) to
+    //   vertex i+d of Dj, added with the layer D(j-1)-Dj.
+    //   Otherwise SAT_CYCLES=3 (default) or 4 with the EXTRA_* options in every Pass 1 / Pass 2 (as before).
+    auto split_list = [](const std::string& s) {
+        std::vector<std::string> r;
+        std::size_t b = 0;
+        for (;;) { const std::size_t e = s.find(';', b); r.push_back(s.substr(b, e == std::string::npos ? e : e - b)); if (e == std::string::npos) break; b = e + 1; }
+        return r;
+    };
+    std::vector<std::string> layers, chords, jumps;
+    if (const char* l = std::getenv("SAT_LAYERS")) {
+        for (const char* v : {"EXTRA_BRAID", "EXTRA_BRAID_P1", "EXTRA_BRAID_P2", "EXTRA_CHORD", "SAT_CYCLES"})
+            if (std::getenv(v)) throw std::runtime_error(std::string("SAT_LAYERS cannot be combined with ") + v);
+        layers = split_list(l);
+        chords = std::getenv("SAT_CHORDS") ? split_list(std::getenv("SAT_CHORDS")) : std::vector<std::string>(layers.size() - 1, "-");
+        if (layers.size() < 2 || chords.size() != layers.size() - 1)
+            throw std::runtime_error("SAT_LAYERS needs >= 2 layers and SAT_CHORDS one entry per middle cycle");
+        jumps = std::getenv("SAT_JUMPS") ? split_list(std::getenv("SAT_JUMPS")) : std::vector<std::string>(layers.size() - 1, "-");
+        if (jumps.size() != layers.size() - 1) throw std::runtime_error("SAT_JUMPS needs one entry per cycle D3, ..., Dk");
+    } else if (std::getenv("SAT_JUMPS")) throw std::runtime_error("SAT_JUMPS needs SAT_LAYERS");
+    const std::size_t ncycles = !layers.empty() ? layers.size() + 1 : std::getenv("SAT_CYCLES") ? std::stoul(std::getenv("SAT_CYCLES")) : 3;
+    if (layers.empty() && ncycles != 3 && ncycles != 4) throw std::runtime_error("SAT_CYCLES must be 3 or 4");
+    // gadget config of layer t (0 = D1-D2, ..., ncycles-2 = the last layer, Pass 2)
+    auto level_config = [&](std::size_t t) {
+        auto cfg = make_config();
+        if (!layers.empty())
+            configure_layer(cfg, layers[t], t + 2 < ncycles ? chords[t] : "-", t > 0 ? jumps[t - 1] : "-", t + 2 == ncycles);
+        return cfg;
+    };
+    if (!layers.empty()) configure_layer(config, layers[0], chords[0], "-", false);
+    std::vector<NestedCycleSearcher<klim>::Config> level_configs; // built once, copied for every run below a leaf
+    for (std::size_t t = 0; t + 1 < ncycles; ++t) level_configs.push_back(level_config(t));
+    auto has_jumps = [&](std::size_t t) { return !layers.empty() && t > 0 && jumps[t - 1] != "-"; };
+    // active cycle of the next layer: the last cycle, then (for the jump edges) the one below it
+    auto set_active = [&](auto& cfg, const std::vector<std::size_t>& starts) {
+        for (std::size_t i = 0; i < c; ++i) cfg.active_cycle.push_back(starts.back() + i);
+        if (starts.size() >= 2)
+            for (std::size_t i = 0; i < c; ++i) cfg.active_cycle.push_back(starts[starts.size() - 2] + i);
+    };
     const auto syms = gadget_symmetries(c, config.gadget_edges_builder());
     config.task_index = std::stoul(argv[2]);
     config.task_count = std::stoul(argv[3]);
@@ -292,11 +340,9 @@ int saturate(int argc, char** argv) {
     config.run_pass1 = true;
     config.run_pass2 = false;
     config.split_export_children = false;
-    // SAT_CYCLES=4: four cycles D1..D4 (at every leaf a second Pass 1 adds the crossable D3, then Pass 2 the uncrossed
-    // D4), so that D2 and D3 are both middle cycles; default 3 (D1, D2, D3)
-    const std::size_t ncycles = std::getenv("SAT_CYCLES") ? std::stoul(std::getenv("SAT_CYCLES")) : 3;
-    if (ncycles != 3 && ncycles != 4) throw std::runtime_error("SAT_CYCLES must be 3 or 4");
-    // the later cycles and the outer star, so that no copy needs a JSON round trip
+    // with k cycles: at every Pass 1 leaf, further Pass 1 levels add the crossable D3, ..., D(k-1), then Pass 2 the
+    // uncrossed Dk, so that D2, ..., D(k-1) are middle cycles. Reserve the later cycles and the outer star, so that
+    // no copy needs a JSON round trip
     config.reserve_vertices = (ncycles - 2) * c + 1;
     fs::create_directories(config.output_dir);
     // STOP_ON_UNSATURATED=<marker file> (sweeps): stop at the first complete drawing that is not saturated and
@@ -304,6 +350,28 @@ int saturate(int argc, char** argv) {
     const char* stop_marker = std::getenv("STOP_ON_UNSATURATED");
     if (stop_marker && fs::exists(stop_marker)) {
         std::cout << "SKIP: " << stop_marker << " exists, the gadget is not maximal" << std::endl;
+        return 0;
+    }
+    // SAT_STOP_LEVEL=j (existence sweeps, 3 <= j < k): no layers beyond j cycles, the leaves with j cycles are only
+    // counted (intermediate_<j>.txt). With STOP_AT_LEVEL_MARKER=<marker file> the task stops at the first such leaf
+    // and appends to the marker (that leaf's drawing in <outdir>/leaf_<j>.json); a task whose marker already exists
+    // (j cycles are drawable) skips, and a running task stops at its next D1-D2 leaf once the marker appears.
+    // SAT_AT_STOP_LEVEL=1 (without the marker): saturation test of every leaf with j cycles as if Dj were the uncrossed
+    // outer cycle (outer star, saturation.jsonl), an estimate of the room left below Dj (Dj itself is crossable)
+    const std::size_t stop_level = std::getenv("SAT_STOP_LEVEL") ? std::stoul(std::getenv("SAT_STOP_LEVEL")) : 0;
+    if (stop_level != 0 && (stop_level < 3 || stop_level >= ncycles)) throw std::runtime_error("SAT_STOP_LEVEL must be in [3, k)");
+    const char* level_marker = std::getenv("STOP_AT_LEVEL_MARKER");
+    const bool sat_at_stop_level = std::getenv("SAT_AT_STOP_LEVEL") && std::string(std::getenv("SAT_AT_STOP_LEVEL")) != "0";
+    // SAT_WATCH_CYCLE=q (with SAT_STOP_LEVEL=j, q <= j): sort the leaves with j cycles by whether a cycle edge of Dq is
+    // crossed; hashes of the distinct leaves in <outdir>/watch_crossed.txt / watch_uncrossed.txt, one example of each
+    // in watch_crossed.json / watch_uncrossed.json (blocks of q cycles whose last cycle is never crossed)
+    const std::size_t watch_cycle = std::getenv("SAT_WATCH_CYCLE") ? std::stoul(std::getenv("SAT_WATCH_CYCLE")) : 0;
+    if (watch_cycle != 0 && (stop_level == 0 || watch_cycle > stop_level)) throw std::runtime_error("SAT_WATCH_CYCLE needs SAT_STOP_LEVEL >= it");
+    std::size_t watch_counts[2] = {0, 0}; // leaves with Dq uncrossed / crossed
+    // WATCH_ALL=1: also write every distinct watched leaf to <outdir>/watch_crossed.jsonl / watch_uncrossed.jsonl
+    const bool watch_all = std::getenv("WATCH_ALL") && std::string(std::getenv("WATCH_ALL")) != "0";
+    if (level_marker && fs::exists(level_marker)) {
+        std::cout << "SKIP: " << level_marker << " exists, " << stop_level << " cycles are drawable" << std::endl;
         return 0;
     }
 
@@ -335,6 +403,7 @@ int saturate(int argc, char** argv) {
     std::size_t max_braid = 0, max_total = 0; // greedy augmentation maxima
     std::map<std::string, std::size_t> type_count; // insertable edge types over the distinct drawings
     std::unordered_set<IsoCode, IsoCodeHash> seen;
+    drop_partial_line((fs::path(config.output_dir) / "saturation.jsonl").string());
     std::ofstream out(fs::path(config.output_dir) / "saturation.jsonl", std::ios::app);
 
     // debug: DEBUG_FIND_LEAF=<drawing.json> reports when a leaf isomorphic to that drawing is reached
@@ -496,7 +565,7 @@ int saturate(int argc, char** argv) {
     };
     // Pass 2 on d: the uncrossed last cycle is attached to the cycle starting at starts.back()
     auto run_pass2 = [&](const Drawing<klim>& d, std::vector<std::size_t> starts) {
-        auto cfg = make_config();
+        auto cfg = level_configs[ncycles - 2];
         cfg.split_mode = true;
         cfg.run_pass1 = false;
         cfg.run_pass2 = true;
@@ -507,18 +576,111 @@ int saturate(int argc, char** argv) {
         if (const char* r = std::getenv("MCF_PRUNING")) cfg.enable_mcf_pruning = std::string(r) != "0";
         cfg.split_files = false;
         cfg.export_files = false;
-        for (std::size_t i = 0; i < c; ++i) cfg.active_cycle.push_back(starts.back() + i);
+        set_active(cfg, starts);
         cfg.solution_callback = [&](const Drawing<klim>& D, std::size_t nmB) {
-            ++completions;
             std::vector<std::size_t> all = starts;
             all.push_back(nmB);
             complete(D, all);
         };
         NestedCycleSearcher<klim>(cfg).run();
     };
-    std::size_t inner_leaves = 0; // SAT_CYCLES=4: leaves of the second Pass 1
+    // the cycles so far start at starts (the last one crossable): add the next layer (Pass 1 again, or Pass 2 for the
+    // last one), recursively
+    std::vector<std::size_t> inner_leaves(ncycles, 0); // leaves of the Pass 1 runs of layer t >= 1
+    // distinct intermediate drawings per level: hash of the reduced drawing's code of every leaf with j cycles, once
+    // per task, in <outdir>/intermediate_<j>.txt (the union over the tasks gives the distinct ones). After a layer with
+    // jump edges the reduced drawing does not determine the next layer (it forgets the cycle below), so the hash is
+    // of the full drawing's code (strong isomorphism) there.
+    std::vector<std::unordered_set<std::size_t>> level_seen(ncycles);
+    std::vector<std::ofstream> level_files(ncycles);
+    for (std::size_t j = 2; j < ncycles; ++j) {
+        const fs::path f = fs::path(config.output_dir) / ("intermediate_" + std::to_string(j) + ".txt");
+        drop_partial_line(f.string());
+        level_files[j].open(f, std::ios::app);
+    }
+    auto record_level = [&](std::size_t j, const IsoCode& code) {
+        const std::size_t h = IsoCodeHash()(code);
+        if (level_seen[j].insert(h).second) level_files[j] << h << "\n";
+    };
+    std::function<void(const Drawing<klim>&, const std::vector<std::size_t>&)> extend =
+            [&](const Drawing<klim>& d, const std::vector<std::size_t>& starts) {
+        const std::size_t t = starts.size() - 1; // next layer: D(t+1) - D(t+2)
+        if (stop_marker && fs::exists(stop_marker)) { // another task found a drawing with an insertable edge
+            std::cout << "STOP: " << stop_marker << " appeared, the gadget is not maximal" << std::endl;
+            std::exit(0);
+        }
+        if (t + 2 == ncycles) { run_pass2(d, starts); return; }
+        auto cfg = level_configs[t];
+        apply_env_options(cfg);
+        cfg.split_mode = true;
+        cfg.run_pass1 = true;
+        cfg.run_pass2 = false;
+        cfg.split_depth = 0;
+        cfg.task_index = 0;
+        cfg.task_count = 1;
+        cfg.input_drawing = &d;
+        cfg.split_files = false;
+        cfg.export_files = false;
+        cfg.split_export_children = false;
+        set_active(cfg, starts);
+        cfg.leaf_callback = [&, starts, t](const Drawing<klim>& d2, std::size_t nm2, const IsoCode& code2) {
+            ++inner_leaves[t];
+            record_level(t + 2, has_jumps(t) ? canonical_code_free(d2) : code2);
+            if (t + 2 == stop_level) {
+                if (level_marker) {
+                    std::ofstream(level_marker, std::ios::app) << "task " << config.task_index << "\n";
+                    std::ofstream(fs::path(config.output_dir) / ("leaf_" + std::to_string(stop_level) + ".json"))
+                            << d2.serialize_to_json().dump();
+                    std::cout << "STOP: drawing with " << stop_level << " cycles found (marker " << level_marker << ")" << std::endl;
+                    std::exit(0);
+                }
+                if (watch_cycle) {
+                    const std::size_t s = watch_cycle - 1 < starts.size() ? starts[watch_cycle - 1] : nm2;
+                    auto on_cycle_edge = [&](const HdsEdge* e) {
+                        if (e->u < s || e->u >= s + c || e->v < s || e->v >= s + c) return false;
+                        const std::size_t diff = (e->u + c - e->v) % c;
+                        return diff == 1 || diff == c - 1;
+                    };
+                    bool crossed = false;
+                    for (const auto& x : d2.crossings)
+                        if (on_cycle_edge(x.halfedge->edge) || on_cycle_edge(x.halfedge->next->edge)) { crossed = true; break; }
+                    ++watch_counts[crossed];
+                    static std::unordered_set<std::size_t> seen[2];
+                    const std::size_t h = IsoCodeHash()(canonical_code_free(d2));
+                    if (seen[crossed].insert(h).second) {
+                        const std::string name = crossed ? "watch_crossed" : "watch_uncrossed";
+                        std::ofstream(fs::path(config.output_dir) / (name + ".txt"), std::ios::app) << h << "\n";
+                        const fs::path ex = fs::path(config.output_dir) / (name + ".json");
+                        if (!fs::exists(ex)) std::ofstream(ex) << d2.serialize_to_json().dump();
+                        if (watch_all) { // every distinct leaf with its cycle labels (D1.. as in saturation.jsonl)
+                            nlohmann::json r;
+                            for (std::size_t q = 0; q < starts.size(); ++q) r["labels"]["D" + std::to_string(q + 1)] = starts[q];
+                            r["labels"]["D" + std::to_string(starts.size() + 1)] = nm2;
+                            r["drawing"] = d2.serialize_to_json();
+                            std::ofstream(fs::path(config.output_dir) / (name + ".jsonl"), std::ios::app) << r.dump() << "\n";
+                        }
+                    }
+                }
+                if (sat_at_stop_level) { // room estimate: test the leaf as if its last cycle were the uncrossed outer one
+                    std::vector<std::size_t> more = starts;
+                    more.push_back(nm2);
+                    complete(d2, more);
+                }
+                return;
+            }
+            std::vector<std::size_t> more = starts;
+            more.push_back(nm2);
+            extend(d2, more);
+        };
+        NestedCycleSearcher<klim>(cfg).run();
+    };
     config.leaf_callback = [&](const Drawing<klim>& d, std::size_t nmA, const IsoCode& code) {
         ++leaves;
+        if (level_marker && fs::exists(level_marker)) { // another task found a drawing with stop_level cycles
+            std::cout << "STOP: " << level_marker << " appeared, " << stop_level << " cycles are drawable" << std::endl;
+            std::exit(0);
+        }
+        record_level(2, code);
         if (check_roundtrip) roundtrip(d);
         if (debug_target && canonical_code(d, syms) == *debug_target) { // (code is of the reduced drawing)
             std::cout << "DEBUG: target leaf reached" << std::endl;
@@ -529,29 +691,7 @@ int saturate(int argc, char** argv) {
         ++matching;
         if (filter) classes_reached.insert(fc->second);
         const std::size_t completions_before = completions;
-        if (ncycles == 3) {
-            run_pass2(d, {0, nmA});
-        } else {
-            // second Pass 1: crossable D3 attached to D2 (from the reserved vertices), Pass 2 at each of its leaves
-            auto cfg = make_config();
-            apply_env_options(cfg);
-            cfg.split_mode = true;
-            cfg.run_pass1 = true;
-            cfg.run_pass2 = false;
-            cfg.split_depth = 0;
-            cfg.task_index = 0;
-            cfg.task_count = 1;
-            cfg.input_drawing = &d;
-            cfg.split_files = false;
-            cfg.export_files = false;
-            cfg.split_export_children = false;
-            for (std::size_t i = 0; i < c; ++i) cfg.active_cycle.push_back(nmA + i);
-            cfg.leaf_callback = [&](const Drawing<klim>& d2, std::size_t nmB, const IsoCode&) {
-                ++inner_leaves;
-                run_pass2(d2, {0, nmA, nmB});
-            };
-            NestedCycleSearcher<klim>(cfg).run();
-        }
+        extend(d, {0, nmA});
         if (filter && completions > completions_before) classes_completed.insert(fc->second);
     };
 
@@ -606,7 +746,7 @@ int saturate(int argc, char** argv) {
         Drawing<klim> d(nlohmann::json::parse(std::ifstream(dl)));
         std::cout << "debug leaf " << dl << ": problems '" << drawing_problems(d) << "'" << std::endl;
         config.leaf_callback(d, c + 1, canonical_code(d, syms));
-        std::cout << "complete 3-cycle drawings: " << completions << ", distinct: " << distinct << ", saturated: " << saturated
+        std::cout << "complete drawings: " << completions << ", distinct: " << distinct << ", saturated: " << saturated
                   << ", errors: " << errors << std::endl;
         return 0;
     }
@@ -619,12 +759,14 @@ int saturate(int argc, char** argv) {
         *o << "task " << config.task_index << "/" << config.task_count << ", split_depth " << config.split_depth
            << ", units " << result.split_units << ", time " << secs << "s\n"
            << "leaves (with potential final face): " << leaves << ", with finishable reduction: " << matching << "\n"
-           << "cycles: " << ncycles << (ncycles == 4 ? ", leaves of the second Pass 1: " + std::to_string(inner_leaves) : std::string()) << "\n"
-           << "complete 3-cycle drawings: " << completions << ", distinct (this task): " << distinct
+           << "cycles: " << ncycles << [&] { std::string r; for (std::size_t t = 1; t + 2 < ncycles; ++t) r += ", leaves of Pass 1 level " + std::to_string(t + 1) + ": " + std::to_string(inner_leaves[t]); return r; }() << "\n"
+           << "complete drawings: " << completions << ", distinct (this task): " << distinct
            << ", saturated: " << saturated << ", not saturated: " << distinct - saturated << ", errors: " << errors << "\n"
            << "finishable classes reached: " << classes_reached.size() << ", of which completed from the complete drawing: "
            << classes_completed.size() << "\n"
            << "greedy augmentation: max braid edges added together " << max_braid << ", max edges in total " << max_total << "\n";
+        if (watch_cycle) *o << "leaves with " << stop_level << " cycles: D" << watch_cycle << " uncrossed " << watch_counts[0]
+                            << ", D" << watch_cycle << " crossed " << watch_counts[1] << "\n";
         if (check_roundtrip) *o << "roundtrip checked: " << roundtrip_checked << ", failed: " << roundtrip_failed << "\n";
         for (const auto& [t, n] : type_count) *o << "  drawings with an insertable " << t << " edge: " << n << "\n";
     }
