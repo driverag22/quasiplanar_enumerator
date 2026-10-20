@@ -46,6 +46,7 @@ std::size_t chain_label(std::size_t c, std::size_t y) {
     return c * n1 + y;
 }
 
+// determine if vertex v is in copy c
 bool in_copy(std::size_t c, std::size_t v) {
     for (std::size_t y = 0; y < n1; ++y)
         if (chain_label(c, y) == v) return true;
