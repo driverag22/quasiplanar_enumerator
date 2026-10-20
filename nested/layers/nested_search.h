@@ -907,7 +907,9 @@ namespace nested_search {
         std::vector<PlacementFilter> pfilter(edges.size());
         std::vector<std::uint64_t> placed_stamp(edges.size(), 0);
         std::uint64_t stamp_counter = 0;
+        // given a path, check if the chosen face for the target vertex is reachable for all incident edges
         auto landing_ok = [&](std::size_t pos, const HdsPath& path, std::size_t target) -> bool {
+            // only run if target is not in the drawing yet
             if (!pass1 || d.vertices[target].halfedge) return true;
             PlacementFilter& f = pfilter[pos];
             const std::uint64_t base = pos == 0 ? 0 : placed_stamp[pos - 1];
@@ -989,14 +991,17 @@ PLACED: // edge e has just been added
                     placed_stamp[i] = ++stamp_counter;
                 }
 
-                // split: only search below the units owned by this task
+                // split: when we reach split_depth, make sure we only search
+                // below units owned by this task
                 if (split && i + 1 == config_.split_depth) {
                     close_unit(); // reaching the next unit completes the previous one
                     if (owns(unit)) {
+                        // move to the next edges (into unit's decision tree)
                         open_unit = unit++;
                         split_snapshot = edges;
                         split_snapshot_valid = true;
                     } else {
+                        // try next path
                         ++unit;
                         p = d.edges.back().built;
                         d.remove_edge();
@@ -1010,7 +1015,7 @@ PLACED: // edge e has just been added
             }
 
             if (++e == edges.end()) { // all edges drawn
-                if (pass1) intermediate(d, nm, syms);
+                if (pass1) intermediate(d, nm, syms); // compute intermediate drawing
                 else if (config_.solution_callback) config_.solution_callback(d);
                 goto BACKUP;
             }
