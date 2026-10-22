@@ -1,4 +1,4 @@
-// drawings of H_3 have 260 edges, more than the default MAX_EDGES (96) of the header
+// drawings of three copies of H have 260 edges, more than the default HDS_MAX_EDGES (96) of the header
 #define HDS_MAX_EDGES 320
 #include "hds_quasiplanar.h"
 #include <filesystem>
@@ -15,7 +15,7 @@
 typedef std::pair<std::size_t, std::size_t> VPair;
 
 const std::string h_dir = "../quasiDrawings/K10_plus4/u_x/";     // the drawings of H
-const std::string chain_dir = "../quasiDrawings/K10_plus4/chain/"; // output
+const std::string chain_dir = "../quasiDrawings/K10_plus4/chain/"; // output: two copies in H2/, three copies in H3/
 
 // Chains of copies of H = G+u+x (16 vertices, 82 edges; its four drawings from k10_plus4_u_x.cpp).
 // Consecutive copies are glued by the joint J: vertex 5 of copy c is vertex 10 of copy c+1, vertex 6 of copy c is
@@ -27,11 +27,11 @@ const std::string chain_dir = "../quasiDrawings/K10_plus4/chain/"; // output
 //     sigma of H (mirroring copy 1 = mirroring the whole drawing, which changes nothing);
 //   - every further copy is drawn so that its own drawing is sigma(H_t) or its mirror image, for every t and sigma,
 //     guided by the planar map of that target drawing (see add_copy).
-// All drawings found are saved in chain_dir (input for window_check). Run from the repository root.
+// All drawings found are saved in chain_dir/H2 and chain_dir/H3 (input for window_check). Run from the repository root.
 const std::size_t n1 = 16;                  // vertices of H
 const std::size_t num_drawings = 4;         // drawings of H, up to its automorphisms and mirroring
 const std::size_t max_copies = 3;
-// labels: copy c (0-based) uses c * 16 + (0..15), see chain_label(); its two shared vertices take the labels of the previous
+// labels: copy c (c = 1, 2, 3) uses (c - 1) * 16 + (0..15), see chain_label(); its two shared vertices take the labels of the previous
 // copy, so 2 labels per further copy stay unused (isolated): three copies have 48 labels but 16 + 14 + 14 = 44 vertices
 const std::size_t num_labels = n1 * max_copies;
 const std::size_t num_vertices = n1 + (n1 - 2) * (max_copies - 1);
@@ -50,11 +50,11 @@ const std::vector<std::vector<std::size_t>> automorphisms = {
 
 typedef Drawing<klim> D;
 
-// label of vertex y (H label) of copy c: a shared vertex keeps the label it has in copy c-1
+// label of vertex y (H label) of copy c (c = 1, 2, 3): a shared vertex keeps the label it has in copy c-1
 std::size_t chain_label(std::size_t c, std::size_t y) {
     for (auto [prev, next] : shared)
-        if (c > 0 && y == next) return chain_label(c - 1, prev);
-    return c * n1 + y;
+        if (c > 1 && y == next) return chain_label(c - 1, prev);
+    return (c - 1) * n1 + y;
 }
 
 // ---- planar map of a sub-drawing: everything needed to compare the drawing of one copy with a target ----
@@ -168,7 +168,7 @@ bool insertable(D& d, std::size_t a, std::size_t b) {
 
 // ---- adding a copy ----
 
-// Adds copy c (c >= 1) to the drawing d of copies 0..c-1 in every possible way and calls done for every result.
+// Adds copy c (c >= 2) to the drawing d of copies 1..c-1 in every possible way and calls done for every result.
 // The drawing of copy c alone must be one of the labelled drawings sigma(H_t) or its mirror image. For each choice,
 // the edges of copy c are drawn one at a time (in a fixed order, each new vertex reached from vertices already
 // drawn); after each edge the drawing of copy c so far must equal the same part of the target drawing. The edges M
@@ -188,12 +188,13 @@ void add_copy(D& d, std::size_t c, const std::vector<nlohmann::json>& targets,
         for (const auto& e : h.edges) copy_edges.insert(std::minmax(copy[e.u], copy[e.v]));
     }
 
-    // fix order of the copy-c vertices and edges, the same for every target (all H_t have the same graph, and every
-    // sigma maps it to itself): the shared vertices are drawn already (with the shared edge); then the vertex with
-    // most edges to drawn vertices, together with those edges follow in order (the first of them places it)
+    // the order in which the vertices and edges of copy c are drawn, the same for every target (all H_t have the same
+    // graph, and every sigma maps it to itself): the shared vertices and the shared edge are drawn already; then,
+    // repeatedly, the undrawn vertex with the most edges to drawn vertices, together with those edges (the first of
+    // them places the vertex)
     std::set<std::size_t> drawn;
     for (auto [prev, next] : shared) drawn.insert(copy[next]);
-    std::map<VPair, std::size_t> step_of;   // edge -> number of edges of copy c drawn with it
+    std::map<VPair, std::size_t> step_of;   // edge -> the step that draws it (1, 2, ...; 0: the shared edge)
     for (auto e : copy_edges) if (drawn.count(e.first) && drawn.count(e.second)) step_of[e] = 0;
     std::vector<VPair> steps;
     while (drawn.size() < n1) {
@@ -207,7 +208,6 @@ void add_copy(D& d, std::size_t c, const std::vector<nlohmann::json>& targets,
         if (best_count == 0) throw std::runtime_error("copy is not connected to the drawn vertices");
         for (std::size_t w : drawn)
             if (copy_edges.count(std::minmax(best, w))) {
-                // add edges corresponding to best vertex
                 steps.push_back({w, best});
                 step_of[std::minmax(best, w)] = steps.size();
             }
@@ -222,8 +222,8 @@ void add_copy(D& d, std::size_t c, const std::vector<nlohmann::json>& targets,
                 auto to_chain = [&](std::size_t v) { return copy[automorphisms[s][v]]; };
                 D target(targets[t], n1);
 
-                // target maps after each step (in chain labels, mirrored if needed)
-                // after each step, we check with corresponding target map to see if drawing is valid or not
+                // want[k]: the target map after step k (in chain labels, mirrored if needed); after step k the
+                // drawing of copy c must have exactly this map
                 std::vector<Map> want(steps.size() + 1);
                 for (std::size_t k = 1; k <= steps.size(); ++k) {
                     Map m = extract_map(target,
@@ -254,12 +254,12 @@ void add_copy(D& d, std::size_t c, const std::vector<nlohmann::json>& targets,
                         if (extract_map(d, keep, same) == want[k + 1]) {
                             std::vector<VPair> now;   // edges of M with both endpoints drawn, not drawn yet
                             std::vector<std::size_t> idx;
-                            for (std::size_t i = 0; i < joint.size(); ++i) // check if new joint edges can be added
+                            for (std::size_t i = 0; i < joint.size(); ++i)
                                 if (!joint_drawn[i] && d.vertices[joint[i].first].halfedge && d.vertices[joint[i].second].halfedge) {
                                     now.push_back(joint[i]);
                                     idx.push_back(i);
                                 }
-                            // add joint edges, if there are any
+                            // draw these edges of M in all ways, then go on with the next step
                             for (auto i : idx) joint_drawn[i] = true;
                             draw_edges(d, now, 0, [&](D&) { step(k + 1); });
                             for (auto i : idx) joint_drawn[i] = false;
@@ -279,9 +279,9 @@ void add_copy(D& d, std::size_t c, const std::vector<nlohmann::json>& targets,
 // the missing edges between copy c and the earlier copies that can be inserted into d
 std::vector<VPair> insertable_pairs(D& d, std::size_t c) {
     std::set<std::size_t> earlier, vertices_c;
-    for (std::size_t k = 0; k < c; ++k) for (std::size_t y = 0; y < n1; ++y) earlier.insert(chain_label(k, y));
-    for (std::size_t y = 0; y < n1; ++y) 
-        // ensure we dont take vertices shared with previous drawing twice
+    for (std::size_t k = 1; k < c; ++k) for (std::size_t y = 0; y < n1; ++y) earlier.insert(chain_label(k, y));
+    for (std::size_t y = 0; y < n1; ++y)
+        // skip the vertices that copy c shares with copy c-1
         if (!earlier.count(chain_label(c, y))) vertices_c.insert(chain_label(c, y));
     std::set<VPair> present;
     for (const auto& e : d.edges) present.insert(std::minmax(e.u, e.v));
@@ -292,12 +292,14 @@ std::vector<VPair> insertable_pairs(D& d, std::size_t c) {
     return res;
 }
 
-void save(const D& d, const std::string& name) {
-    std::ofstream(chain_dir + name + ".json") << d.serialize_to_json().dump(4);
+// sub_dir: H2 or H3, the number of copies
+void save(const D& d, const std::string& sub_dir, const std::string& name) {
+    std::ofstream(chain_dir + sub_dir + "/" + name + ".json") << d.serialize_to_json().dump(4);
 }
 
 int main() {
-    std::filesystem::create_directories(chain_dir);
+    std::filesystem::create_directories(chain_dir + "H2");
+    std::filesystem::create_directories(chain_dir + "H3");
     std::vector<nlohmann::json> targets;
     for (std::size_t t = 1; t <= num_drawings; ++t) { // loading 4 drawings of H = G+u+x
         std::ifstream in(h_dir + "k10_plus4_u_x_" + std::to_string(t) + ".json");
@@ -307,10 +309,10 @@ int main() {
     }
 
     std::size_t two = 0, two_ext = 0, three = 0, three_ext = 0;
-    // copy 0 runs through the 4 drawings of H, together with their automorphisms (id, 8 <-> 9)
+    // copy 1 runs through the 4 drawings of H, together with their automorphisms (id, 8 <-> 9)
     for (std::size_t t1 = 0; t1 < num_drawings; ++t1) {
         for (std::size_t s1 = 0; s1 < automorphisms.size(); ++s1) {
-            // copy 0 = sigma(H_t1): the target drawing with its vertices renamed by sigma
+            // copy 1 = sigma(H_t1): the target drawing with its vertices renamed by sigma
             nlohmann::json j = targets[t1];
             for (auto& st : j["drawing_recipe"]) {
                 st["u"] = automorphisms[s1][st["u"].get<std::size_t>()];
@@ -321,22 +323,22 @@ int main() {
             std::size_t found2 = 0, found3 = 0;
 
             // add copy 2
-            add_copy(d, 1, targets, [&](D& d2, std::size_t t2, std::size_t s2, bool m2) {
+            add_copy(d, 2, targets, [&](D& d2, std::size_t t2, std::size_t s2, bool m2) {
                 ++two;
                 ++found2;
                 const std::string name2 = name1 + "_H" + std::to_string(t2 + 1) + "s" + std::to_string(s2) + (m2 ? "m" : "");
-                save(d2, name2);
-                if (!insertable_pairs(d2, 1).empty()) {
+                save(d2, "H2", name2);
+                if (!insertable_pairs(d2, 2).empty()) {
                     ++two_ext;
                     std::cout << "  extensible: " << name2 << std::endl;
                 }
                 // add copy 3
-                add_copy(d2, 2, targets, [&](D& d3, std::size_t t3, std::size_t s3, bool m3) {
+                add_copy(d2, 3, targets, [&](D& d3, std::size_t t3, std::size_t s3, bool m3) {
                     ++three;
                     ++found3;
                     const std::string name3 = name2 + "_H" + std::to_string(t3 + 1) + "s" + std::to_string(s3) + (m3 ? "m" : "");
-                    save(d3, name3);
-                    if (!insertable_pairs(d3, 2).empty()) {
+                    save(d3, "H3", name3);
+                    if (!insertable_pairs(d3, 3).empty()) {
                         ++three_ext;
                         std::cout << "  extensible: " << name3 << std::endl;
                     }

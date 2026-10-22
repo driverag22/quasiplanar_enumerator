@@ -1,4 +1,4 @@
-// drawings of H_3 have 260 edges, more than the default MAX_EDGES (96) of the header
+// drawings of three copies of H have 260 edges, more than the default HDS_MAX_EDGES (96) of the header
 #define HDS_MAX_EDGES 320
 #include "hds_quasiplanar.h"
 #include <filesystem>
@@ -14,17 +14,17 @@
 
 typedef std::pair<std::size_t, std::size_t> VPair;
 
-const std::string chain_dir = "../quasiDrawings/K10_plus4/chain/"; // drawings saved by chain_check (run from the repository root)
+const std::string chain_dir = "../quasiDrawings/K10_plus4/chain/"; // drawings saved by chain_check: two copies in H2/, three in H3/ (run from the repository root)
 
-// Separation check on the drawings of three copies 0 -J- 1 -J- 2 of the chain, as saved by chain_check in
-// chain_dir (file names with three parts, e.g. H1s0_H1s0m_H2s0.json). For every such drawing d:
-//   1. containment: the faces of D(copy 1) used by side 0 (copy 0 and the edges M between copies 0 and 1) and the
-//      faces used by side 2 (copy 2 and the edges M between copies 1 and 2) are disjoint, and the two shared edges
-//      (copy 0 - copy 1 and copy 1 - copy 2) are uncrossed;
-//   2. removing side 2 (its edges were drawn last) gives back the drawing of two copies that d was built on;
-//   3. s-test: in that drawing of two copies, no curve from an unshared vertex of copy 0 to an isolated point s
-//      ends in a face of D(copy 1) that side 2 used in step 1.
-// D(copy 1) is the drawing of the edges of copy 1 alone (see copy_faces).
+// Separation check on the drawings of three copies 1 -J- 2 -J- 3 of the chain, as saved by chain_check in
+// chain_dir/H3 (e.g. H1s0_H1s0m_H2s0.json). For every such drawing d:
+//   1. containment: the faces of D(copy 2) used by side 1 (copy 1 and the edges M between copies 1 and 2) and the
+//      faces used by side 3 (copy 3 and the edges M between copies 2 and 3) are disjoint, and the two shared edges
+//      (copy 1 - copy 2 and copy 2 - copy 3) are uncrossed;
+//   2. removing side 3 (its edges were drawn last) gives back the drawing of two copies that d was built on;
+//   3. s-test: in that drawing of two copies, no curve from an unshared vertex of copy 1 to an isolated point s
+//      ends in a face of D(copy 2) that side 3 used in step 1.
+// D(copy 2) is the drawing of the edges of copy 2 alone (see copy_faces).
 const std::size_t n1 = 16;                  // vertices of H
 const std::size_t m1 = 82;                  // edges of H
 const std::size_t max_copies = 3;
@@ -39,11 +39,11 @@ const std::vector<VPair> shared = {{5, 10}, {6, 0}};
 
 typedef Drawing<klim> D;
 
-// label of vertex y (H label) of copy c: a shared vertex keeps the label it has in copy c-1
+// label of vertex y (H label) of copy c (c = 1, 2, 3): a shared vertex keeps the label it has in copy c-1
 std::size_t chain_label(std::size_t c, std::size_t y) {
     for (auto [prev, next] : shared)
-        if (c > 0 && y == next) return chain_label(c - 1, prev);
-    return c * n1 + y;
+        if (c > 1 && y == next) return chain_label(c - 1, prev);
+    return (c - 1) * n1 + y;
 }
 
 // determine if vertex v is in copy c
@@ -66,7 +66,7 @@ bool in_copy(std::size_t c, std::size_t v) {
 // otherwise.
 //
 // To compare faces of D(copy c) in two different drawings that contain the same D(copy c) (here d with and without
-// side 2), a face is named by the points of D(copy c) on its boundary: the vertices of copy c and the crossings
+// side 3), a face is named by the points of D(copy c) on its boundary: the vertices of copy c and the crossings
 // between two edges of copy c. copy_faces checks that no two faces of D(copy c) get the same name, so the name
 // identifies the face.
 
@@ -108,7 +108,7 @@ CopyFaces copy_faces(const D& d, std::size_t c) {
     std::vector<std::size_t> parent(num_faces_d);
     std::iota(parent.begin(), parent.end(), 0);
     for (const auto& h : d.halfedges)
-        if (!in_c(h.edge)) 
+        if (!in_c(h.edge))
             parent[find_root(parent, face_of_d[&h])] = find_root(parent, face_of_d[h.twin]);
 
     // number the faces of D(copy c) 0, 1, ...
@@ -155,13 +155,13 @@ CopyFaces copy_faces(const D& d, std::size_t c) {
 
 // ---- the three steps ----
 
-// side of an edge outside copy 1: 0 or 2, the copy of its endpoint outside copy 1 (no edge joins copies 0 and 2)
+// side of an edge outside copy 2: 1 or 3, the copy of its endpoint outside copy 2 (no edge joins copies 1 and 3)
 std::size_t side(const HdsEdge& e) {
-    std::size_t out = in_copy(1, e.u) ? e.v : e.u;
-    return in_copy(2, out) ? 2 : 0;
+    std::size_t out = in_copy(2, e.u) ? e.v : e.u;
+    return in_copy(3, out) ? 3 : 1;
 }
 
-bool in_side2(const HdsEdge& e) { return !(in_copy(1, e.u) && in_copy(1, e.v)) && side(e) == 2; }
+bool in_side3(const HdsEdge& e) { return !(in_copy(2, e.u) && in_copy(2, e.v)) && side(e) == 3; }
 
 D load(const std::string& file) {
     std::ifstream in(file);
@@ -171,80 +171,77 @@ D load(const std::string& file) {
 }
 
 int main() {
-    std::vector<std::string> files;   // the drawings of three copies: names with three parts
-    for (const auto& entry : std::filesystem::directory_iterator(chain_dir)) {
-        std::string stem = entry.path().stem().string();
-        if (std::count(stem.begin(), stem.end(), '_') == 2) files.push_back(stem);
-    }
+    std::vector<std::string> files;   // the drawings of three copies
+    for (const auto& entry : std::filesystem::directory_iterator(chain_dir + "H3"))
+        if (entry.path().extension() == ".json") files.push_back(entry.path().stem().string());
     std::sort(files.begin(), files.end());
 
     std::size_t contain_fails = 0, shared_fails = 0, s_fails = 0;
     for (const std::string& name : files) {
-        D d = load(chain_dir + name + ".json");
+        D d = load(chain_dir + "H3/" + name + ".json");
 
-        // 1. containment: the faces of D(copy 1) that the edges of each side lie in
-        CopyFaces faces_full = copy_faces(d, 1);
-        std::set<FaceName> used_by_side0, used_by_side2;
+        // 1. containment: the faces of D(copy 2) that the edges of each side lie in
+        CopyFaces faces_full = copy_faces(d, 2);
+        std::set<FaceName> used_by_side1, used_by_side3;
         for (const auto& h : d.halfedges) {
-            if (in_copy(1, h.edge->u) && in_copy(1, h.edge->v)) continue;
-            (side(*h.edge) == 2 ? used_by_side2 : used_by_side0).insert(faces_full.name[faces_full.face[&h]]);
+            if (in_copy(2, h.edge->u) && in_copy(2, h.edge->v)) continue;
+            (side(*h.edge) == 3 ? used_by_side3 : used_by_side1).insert(faces_full.name[faces_full.face[&h]]);
         }
         std::size_t common = 0;
-        for (const FaceName& f : used_by_side2) common += used_by_side0.count(f);
+        for (const FaceName& f : used_by_side3) common += used_by_side1.count(f);
         if (common > 0) ++contain_fails;
 
-        // the shared edges 5-6 of copy 0 (= 10-0 of copy 1) and 5-6 of copy 1 (= 10-0 of copy 2) are uncrossed
+        // the shared edges 5-6 of copy 1 (= 10-0 of copy 2) and 5-6 of copy 2 (= 10-0 of copy 3) are uncrossed
         std::size_t shared_crossings = 0;
         for (const auto& e : d.edges)
-            for (std::size_t c = 0; c < 2; ++c)
+            for (std::size_t c = 1; c <= 2; ++c)
                 if (std::minmax(e.u, e.v) == std::minmax(chain_label(c, 5), chain_label(c, 6))) shared_crossings += e.ncr;
         if (shared_crossings > 0) ++shared_fails;
 
-        // 2. remove side 2 (the last edges drawn) and compare with the drawing of two copies it was built on
+        // 2. remove side 3 (the last edges drawn) and compare with the drawing of two copies it was built on
         std::size_t removed = 0;
-        while (!d.edges.empty() && in_side2(d.edges.back())) {
+        while (!d.edges.empty() && in_side3(d.edges.back())) {
             d.remove_edge();
             ++removed;
         }
         for (const auto& e : d.edges)
-            if (in_side2(e)) throw std::runtime_error("an edge of side 2 was not drawn last: " + name);
+            if (in_side3(e)) throw std::runtime_error("an edge of side 3 was not drawn last: " + name);
         const std::string base = name.substr(0, name.find_last_of('_'));
         nlohmann::json mine = nlohmann::json::parse(d.serialize_to_json()["drawing_recipe"].dump());
-        std::ifstream in(chain_dir + base + ".json");
+        std::ifstream in(chain_dir + "H2/" + base + ".json");
         nlohmann::json theirs;
         in >> theirs;
-        if (mine != theirs["drawing_recipe"]) throw std::runtime_error("removing side 2 does not give " + base);
-        // D(copy 1) is untouched, so its faces keep their names
-        if (all_names(copy_faces(d, 1)) != all_names(faces_full)) throw std::runtime_error("face names changed: " + name);
+        if (mine != theirs["drawing_recipe"]) throw std::runtime_error("removing side 3 does not give " + base);
+        // D(copy 2) is untouched, so its faces keep their names
+        if (all_names(copy_faces(d, 2)) != all_names(faces_full)) throw std::runtime_error("face names changed: " + name);
 
-        // 3. s-test: s = the first label with no edge (label 16, unused since copy 1's vertex 0 is labelled 6); draw every curve x-s from
-        // an unshared vertex x of copy 0 and look up the face of D(copy 1) that s lies in
+        // 3. s-test: s = the first label with no edge (label 16, unused since copy 2's vertex 0 is labelled 6); draw every curve x-s from
+        // an unshared vertex x of copy 1 and look up the face of D(copy 2) that s lies in
         std::size_t s = 0;
         while (s < num_labels && d.vertices[s].halfedge) ++s;
         assert(s < num_labels);
         std::size_t curves = 0, hits = 0;
         for (std::size_t y = 0; y < n1; ++y) {
-            std::size_t x = chain_label(0, y);
-            if (in_copy(1, x)) continue;
-            // test all paths from x in copy 0 to new isolated vertex s
+            std::size_t x = chain_label(1, y);
+            if (in_copy(2, x)) continue;
             for (HdsPath p = d.first_path(x, s); !p.empty();) {
                 d.add_edge(p, s);
                 ++curves;
-                CopyFaces faces_curve = copy_faces(d, 1);
+                CopyFaces faces_curve = copy_faces(d, 2);
                 if (all_names(faces_curve) != all_names(faces_full)) throw std::runtime_error("face names changed: " + name);
-                // check if vertex s is placed in face of copy 2
-                if (used_by_side2.count(faces_curve.name[faces_curve.face[d.vertices[s].halfedge]])) ++hits;
+                // does s lie in a face of D(copy 2) that side 3 uses?
+                if (used_by_side3.count(faces_curve.name[faces_curve.face[d.vertices[s].halfedge]])) ++hits;
                 p = d.edges.back().built;
                 d.remove_edge(); // undo edge, go to next one
                 if (!d.next_path(p, s)) break;
             }
         }
-        // some edge from copy 0 was able to reach a face of copy 2
+        // some curve from copy 1 ends in a face of D(copy 2) that side 3 uses
         if (hits > 0) ++s_fails;
 
-        std::cout << name << ": D(copy 1) faces used by side 0: " << used_by_side0.size() << ", by side 2: " << used_by_side2.size()
+        std::cout << name << ": D(copy 2) faces used by side 1: " << used_by_side1.size() << ", by side 3: " << used_by_side3.size()
                   << ", common " << common << ", crossings on shared edges " << shared_crossings << " | removed " << removed << " edges | s-test: " << curves
-                  << " curves, ending in a face of side 2: " << hits << std::endl;
+                  << " curves, ending in a face of side 3: " << hits << std::endl;
     }
     std::cout << "drawings of three copies: " << files.size() << ", containment fails " << contain_fails
               << ", crossed shared edges " << shared_fails << ", s-test fails " << s_fails << std::endl;

@@ -1,6 +1,6 @@
 // Search for the 3-plane drawings of one layer of the nested cycle graph: given a drawing whose last ("active")
 // cycle is uncrossed or crossable, add the next layer (a new cycle and the matching to the active cycle) in all
-// possible ways. Used by nested_layers.h. This is the part of iterative_nested_split.h (the exploration version,
+// possible ways. Used by nested_layers.h. This is the part of ../exploration/iterative_nested_split.h (the exploration version,
 // with options for extra edge classes etc.) that the runs of the thesis use.
 //
 //   Pass 1: the new cycle is crossable. Every complete drawing with a potential final face (a face that a further
@@ -206,7 +206,7 @@ namespace nested_search {
                 if (phi[w] == unset) phi[w] = next_label++;
                 if (!queued[w]) { queued[w] = 1; ++nqueued; q.push(t->twin); }
                 if (!emit(2 * phi[w] + (w >= nv ? 1 : 0)) || !emit(t->edge->ncr)) return;
-                t = (mirror ? t->twin->prev : t->next->twin);
+                t = (mirror ? t->twin->prev : t->next->twin); // rotation ordered depends on whether mirrored or not
             } while (t != s);
             if (!emit(SEP)) return;
         }
@@ -893,7 +893,8 @@ namespace nested_search {
         d.add_vertices(config_.cycle_size);
         std::vector<Edge> edges = config_.layer_edges(nm);
 
-        // Pass 1 uses all checks after every edge; Pass 2 only the reachability and flow checks at the checkpoints
+        // Pass 1: the reachability, placement and final face checks after every edge, the flow check at the
+        // checkpoints; Pass 2: only the reachability and flow checks, at the checkpoints
         auto is_checkpoint = [&](std::size_t i) {
             return std::find(config_.early_prune_checkpoints.begin(), config_.early_prune_checkpoints.end(), i)
                 != config_.early_prune_checkpoints.end();
@@ -907,7 +908,6 @@ namespace nested_search {
         std::vector<PlacementFilter> pfilter(edges.size());
         std::vector<std::uint64_t> placed_stamp(edges.size(), 0);
         std::uint64_t stamp_counter = 0;
-        // given a path, check if the chosen face for the target vertex is reachable for all incident edges
         auto landing_ok = [&](std::size_t pos, const HdsPath& path, std::size_t target) -> bool {
             // only run if target is not in the drawing yet
             if (!pass1 || d.vertices[target].halfedge) return true;
@@ -1015,7 +1015,7 @@ PLACED: // edge e has just been added
             }
 
             if (++e == edges.end()) { // all edges drawn
-                if (pass1) intermediate(d, nm, syms); // compute intermediate drawing
+                if (pass1) intermediate(d, nm, syms);
                 else if (config_.solution_callback) config_.solution_callback(d);
                 goto BACKUP;
             }

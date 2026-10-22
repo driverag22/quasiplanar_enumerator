@@ -40,6 +40,6 @@ int main(int argc, char** argv) {
             {1, nm + 4}, {3, nm + 6}, {5, nm + 8}, {7, nm + 10}, {9, nm + 12}, {11, nm}, {13, nm + 2},
         };
     };
-    setup.early_prune_checkpoints = {19, 21, 24};  // at 25%, 50% and 75% of the edges
+    setup.early_prune_checkpoints = {19, 21, 24};  // flow check after the edges at these positions (0-based, of 28)
     return nested_layers::main(setup, argc, argv);
 }

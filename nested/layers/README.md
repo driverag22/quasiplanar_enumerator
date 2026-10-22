@@ -2,7 +2,7 @@
 
 G_{c,k}: cycles D1, ..., Dk of length c (12 or 14), consecutive cycles connected by the braided matching
 (even i -> (i-3)', odd i -> (i+3)'). D1 and Dk are uncrossed (in the full graph the gadgets force this),
-D2, ..., D(k-1) may be crossed. The code finds all 3-plane drawings of G_{c,k} and tests them for saturation.
+D2, ..., D(k-1) may be crossed. The code finds all 3-plane drawings of G_{c,k}.
 
 ## Files
 
@@ -10,10 +10,10 @@ D2, ..., D(k-1) may be crossed. The code finds all 3-plane drawings of G_{c,k} a
   length, the number of cycles k, the output directory `run_dir`, the number of tasks and the split depth, the layer
   edges (new cycle + matching, written out), and the checkpoints of the flow check. Change `num_cycles` for
   more cycles.
-- `nested_layers.h`: the driver. Builds the drawings cycle by cycle with the searcher, splits the work into tasks,
-  tests the complete drawings and combines the tasks.
+- `nested_layers.h`: the driver. Builds the drawings cycle by cycle with the searcher, splits the work into tasks
+  and combines the tasks.
 - `nested_search.h`: the searcher. Adds **one** layer (the next cycle and its matching) to a given drawing, in all
-  possible ways. Includes all the heuristic code.
+  possible ways. Contains the pruning, the reduction of intermediate drawings and the canonical codes.
 - `layers.slurm`: one task as a Slurm array task.
 
 ## The searcher (nested_search.h)
@@ -52,10 +52,8 @@ task; a task only searches below the units with `index % num_tasks == task_index
    units.
 2. At every intermediate drawing with j cycles (distinct within the task): Pass 1 again for D(j+1) as long as j+1 < k, Pass 2 for
    the uncrossed Dk otherwise. With k = 2 there is no Pass 1: Pass 2 adds D2 to D1 directly (task 0 only).
-3. Every complete drawing (distinct within the task) is tested for saturation: an uncrossable star is added in the
-   outer face of Dk, and every missing edge between two cycles, or within a middle cycle, is tried with all routes
-   of at most 3 crossings (edges within D1 and within Dk count as present). The drawing is written to
-   `<run_dir>/t<task_index>/c12_3cycles_complete.jsonl` (etc.) with its insertable edges.
+3. Every complete drawing (distinct within the task, up to strong isomorphism) is written to
+   `<run_dir>/t<task_index>/c12_3cycles_complete.jsonl` (etc.).
 4. The hashes of the intermediate drawings (and of those with k-1 cycles that could be finished) go to
    `intermediate.txt`, needed to count distinct drawings over all tasks.
 
@@ -63,7 +61,7 @@ task; a task only searches below the units with `index % num_tasks == task_index
 
 - the distinct intermediate drawings with j cycles (the last one crossable), j = 2, ..., k-1,
 - how many intermediate drawings with k-1 cycles can be finished with an uncrossed Dk,
-- the distinct complete drawings, how many are saturated, and which kinds of edges are insertable,
+- the distinct complete drawings,
 
 and writes all distinct complete drawings to `<run_dir>/c12_3cycles_complete.jsonl`.
 

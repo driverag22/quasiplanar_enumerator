@@ -1,7 +1,7 @@
 # Nested cycles C12 / C14
 
-- `layers/`: the thesis code. All drawings of G_{c,k} for c = 12, 14 (k cycles, the first and last uncrossed), the
-  saturation test, and the counts of the thesis (16,611 / 44,682 drawings with two cycles, the second crossable, etc.).
+- `layers/`: the thesis code. All drawings of G_{c,k} for c = 12, 14 (k cycles, the first and last uncrossed) and
+  the counts of the thesis (16,611 / 44,682 drawings with two cycles, the second crossable, etc.).
   `nested_c12_layers.cpp` / `nested_c14_layers.cpp` (setup, everything hard-coded), `nested_layers.h` (driver),
   `nested_search.h` (search for one layer).
 - `exploration/`: the code of the explorations (extra edge classes, open runs, sweeps) and the original split
@@ -27,7 +27,7 @@ of `main` in `nested_c12_layers.cpp` / `nested_c14_layers.cpp`.
 
 Without a cluster the tasks can run in parallel locally, e.g. `seq 0 99 | xargs -P 8 -n 1 .bin/nested_c12_layers run`.
 The report prints the distinct intermediate drawings per number of cycles, how many intermediate drawings with
-k-1 cycles can be finished, the distinct complete drawings and how many are saturated, and writes all distinct
+k-1 cycles can be finished and the distinct complete drawings, and writes all distinct
 complete drawings to `<run_dir>/c12_3cycles_complete.jsonl` (etc.). Killed tasks: rerun the same command
 (finished prefixes are skipped).
 
