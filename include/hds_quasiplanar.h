@@ -659,7 +659,7 @@ struct Drawing {
         // cross_mat cleanup (after the checks, so a throw leaves it consistent)
         std::size_t removed_label = edges.back().label;
         std::bitset<MAX_EDGES> crossed = cross_mat[removed_label];
-        for (std::size_t b = 0; b < MAX_EDGES; ++b) // hard-coded 96 edge limit
+        for (std::size_t b = 0; b < MAX_EDGES; ++b)
             if (crossed.test(b))
                 cross_mat[b].reset(removed_label);
         cross_mat[removed_label].reset(); // wipe the removed edge's row
@@ -1451,7 +1451,7 @@ struct Drawing {
 #define HDS_MAX_EDGES 96
 #endif
     inline static constexpr std::size_t MAX_EDGES = HDS_MAX_EDGES;
-    std::vector<std::bitset<MAX_EDGES>> cross_mat; // edge crossing matrix, assumes at most 64 edges
+    std::vector<std::bitset<MAX_EDGES>> cross_mat; // edge crossing matrix
 }
 ;
 
