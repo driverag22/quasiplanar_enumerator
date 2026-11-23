@@ -18,35 +18,38 @@ const std::string b42_dir = "../quasiDrawings/K10_plus4/band/B42/";   // the dra
 const std::size_t num_drawings = 2;   // band_start finds exactly two drawings of B_42 (Lemma Small cases (b))
 
 // Window check for the band graphs B_n: from vertex 34 on, a new vertex z is joined to z-7, z-6, z-4, z-3, z-2, z-1.
-// The window of a drawing of B_n is the drawing of the edges with an endpoint in n-8, ..., n-1 (their other endpoints
-// are n-15, ..., n-1); its hidden faces are the faces that the other edges lie in.
+// The window of a drawing of B_n is the drawing of the subgraph induced by its last ten vertices n-10, ..., n-1; its
+// hidden faces are the faces that contain a point of another edge of B_n. Such an edge may end at a vertex of the
+// window (n-7, n-6 and n-4 have neighbors below n-10), and then the face it leaves that vertex into is hidden.
 // For every drawing of B_42, with its window W drawn alone and the new vertex z = 42, the program checks:
-//   1. z can be drawn on W in exactly one way, and then z and its edges lie in no hidden face;
+//   1. z can be drawn on W in exactly one way, and then z and its edges lie in no hidden face (every piece of an
+//      edge of z, also the last one, at its endpoint in W);
 //   2. no vertex of W other than the neighbors of z can be joined to z;
 //   3. s-test: no curve from z to an isolated vertex s ends in a hidden face (every vertex of B_42 outside W lies in one);
 //   4. the window of B_43, which is part of W + z, is W shifted by one, and so are its hidden faces: those that contain
-//      a hidden face of W or an edge of W that left the window.
+//      a hidden face of W or an edge of W that left the window (the edges at n-10).
 // The checks only involve W and its hidden faces, so by induction they hold for every n >= 42 (as window_check.cpp
 // does for the chain of copies of H). Run from the repository root.
 const std::size_t n = 42;
 const std::size_t z = n;                 // the new vertex
 const std::size_t s = n + 1;             // an isolated vertex: the end of curves from z
 const std::size_t num_labels = n + 2;
-// the curves are drawn on W (48 edges) and z (6 edges); a curve crosses every edge at most once, so a bound of at
-// least 54 finds them all, for every n; 2 * 44 - 7 also bounds the crossings of the edges of B_42
+// the curves are drawn on W (37 edges) and z (6 edges); a curve crosses every edge at most once, so a bound of at
+// least 43 finds them all, for every n; 2 * 44 - 7 also bounds the crossings of the edges of B_42
 const std::size_t klim = 2 * num_labels - 7;
 typedef Drawing<klim> D;
 
 const std::vector<std::size_t> z_neighbors = {z - 7, z - 6, z - 4, z - 3, z - 2, z - 1};
+const std::size_t window_size = 10;      // the window of B_m is induced by m-10, ..., m-1
 
-// is u-v an edge of the window of B_m (both endpoints below m, one of them in m-8, ..., m-1)?
+// is u-v an edge of the window of B_m (both endpoints in m-10, ..., m-1)?
 bool in_window(std::size_t m, std::size_t u, std::size_t v) {
-    return std::max(u, v) < m && std::max(u, v) + 8 >= m;
+    return std::max(u, v) < m && std::min(u, v) + window_size >= m;
 }
 
-// vertex labels counted from the first vertex m-15 of the window of B_m, so that windows can be compared
+// vertex labels counted from the first vertex m-10 of the window of B_m, so that windows can be compared
 std::size_t window_label(std::size_t m, std::size_t v) {
-    return v + 15 - m;
+    return v + window_size - m;
 }
 
 // ---- faces of the window ----
@@ -328,7 +331,7 @@ int main() {
             for (std::size_t f : faces_wz.met) in_hidden += hidden.count(faces_wz.name[f]);
 
             // Window Lemma (b), reaching: number of vertices of W that z can be joined to (exp. 0)
-            for (std::size_t v = n - 15; v < n; ++v)
+            for (std::size_t v = n - window_size; v < n; ++v)
                 if (std::find(z_neighbors.begin(), z_neighbors.end(), v) == z_neighbors.end() && !wz.first_path(v, z).empty())
                     ++reaching;
 
