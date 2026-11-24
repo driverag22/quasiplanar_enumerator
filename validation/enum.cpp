@@ -1,175 +1,213 @@
-// Count all simple k-plane (or quasiplane, -DQUASI) drawings of K_n or K_{a,b} up to strong isomorphism and up to
-// orientation-preserving isomorphism (both with relabelling of the vertices by graph automorphisms).
+// Counts the simple k-plane drawings (or, with -DQUASI, the simple quasiplane drawings with at most k crossings per edge)
+// of K_n, of K_{a,b}, or of K_n minus a set F of edges, up to strong isomorphism.
 //
-// Build: g++ -O3 -Wall -std=c++17 -Iinclude -DKLIM=<k> [-DQUASI] validation/enum.cpp -o validation/.bin/enum_k<k>
-// Run:   validation/.bin/enum_k3 K 7 [threads] [split] [flags]       (complete graph K_7)
-//        validation/.bin/enum_k3 B 3 4 [threads] [split] [flags]     (complete bipartite K_{3,4})
-//   threads: worker threads (default 1); split: edges drawn after the star before the work is distributed (default 2)
-//   flags: "iso" = cross-check every drawing against iso.h, "lab" = check that no labelled drawing is found twice
+// Build: g++ -O3 -std=c++17 -Iinclude -pthread -DKLIM=<k> [-DQUASI] validation/enum.cpp -o validation/.bin/enum_k<k>
+// Run:   validation/.bin/enum_k3 K 7 [threads] [iso]                      K_7
+//        validation/.bin/enum_k3 B 3 4 [threads] [iso]                    K_{3,4}
+//        validation/.bin/enum_k3 K 9 minus 1-2,2-3,3-4 [threads] [iso]    K_9 minus a path with three edges
+//   iso: also check the classes against the isomorphism test of iso.h, which the other programs use
 //
-// Symmetry reduction (star fixing):
-//   K_n: the star at vertex 0 is drawn first, with the fixed rotation produced by first_path. In any simple drawing
-//     the star edges at 0 do not cross each other, and relabelling 1..n-1 makes the rotation at 0 equal to the fixed
-//     one; any permutation of 1..n-1 is an automorphism of K_n. So every drawing is, up to a label-permuting
-//     automorphism and an orientation-preserving homeomorphism, one of those enumerated.
-//   K_{a,b} (a <= b), sides A = {0..a-1}, B = {a..a+b-1}: the star from 0 to B is drawn first with a fixed rotation;
-//     any permutation of B is an automorphism of K_{a,b}, so the same argument applies. The remaining edges are drawn
-//     vertex by vertex for x = 1..a-1: first (a, x), which places x, then (a+j, x).
-//   No mirror image is used in the reduction, so the enumerated set contains a representative of every
-//   orientation-preserving class; counting distinct oriented canonical codes therefore counts these classes directly.
+// Method. The graph is G = K_n - F on the vertices 0, ..., n-1. The star at vertex 0, to all its neighbours N(0) in
+// increasing order, is drawn first, with a fixed rotation. In a simple drawing of G, the edges at 0 do not cross, so a
+// permutation p of N(0) makes the rotation at 0 equal to the fixed one, and turns G into K_n - p(F). So every drawing
+// of G is, up to relabelling, a drawing of K_n - p(F) with the fixed star, for one of the distinct images p(F) of F,
+// and we enumerate these for all of them. The other edges are drawn in all possible ways, in colex order (by larger
+// endpoint, then by smaller endpoint), each starting at an endpoint that is already drawn.
+// The drawings are compared by their strong canonical codes (canon.h), which do not use vertex labels.
+// K_{a,b} (a <= b) is K_n minus the edges inside its two sides, where 0, b+1, ..., n-1 form the side of size a and
+// 1, ..., b the side of size b; then F is invariant under the permutations of N(0) = {1, ..., b}.
 #ifdef QUASI
 #include "hds_quasiplanar.h"
 #else
 #include "hds_kplanar.h"
 #endif
 #include "iso.h"
-#include "common.h"
+#include "canon.h"
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <iostream>
+#include <map>
+#include <set>
+#include <string>
+#include <thread>
+#include <unordered_map>
 
 #ifndef KLIM
 #define KLIM 3
 #endif
-const std::size_t klim = KLIM;
-typedef Drawing<klim> D;
+typedef Drawing<KLIM> D;
+typedef std::pair<std::size_t, std::size_t> E;   // an edge (u, v); when drawn, u is the endpoint that is already drawn
+
+// draws edges[i..j-1] in all possible ways on d, and calls done for every resulting drawing
+template <class F>
+void draw_all(D& d, const std::vector<E>& edges, std::size_t i, std::size_t j, const F& done) {
+    if (i == j) return done(d);
+    const auto [a, b] = edges[i];
+    for (HdsPath p = d.first_path(a, b); !p.empty();) {
+        d.add_edge(p, b);
+        draw_all(d, edges, i + 1, j, done);
+        p = d.edges.back().built;
+        d.remove_edge();
+        if (!d.next_path(p, b)) break;
+    }
+}
+
+// K_n - F with the star at 0 drawn, and the remaining edges in drawing order
+std::pair<D, std::vector<E>> start(std::size_t n, const std::set<E>& F) {
+    std::vector<bool> drawn(n, false);
+    D d(n);
+    drawn[0] = true;
+    for (std::size_t v = 1; v < n; ++v) {
+        if (F.count({0, v})) continue;
+        if (d.edges.empty()) d.add_first_edge(0, v);
+        else d.add_edge(d.first_path(0, v), v);
+        drawn[v] = true;
+    }
+    std::vector<E> rest;
+    for (std::size_t v = 2; v < n; ++v)
+        for (std::size_t u = 1; u < v; ++u) {
+            if (F.count({u, v})) continue;
+            if (!drawn[u] && !drawn[v]) throw std::runtime_error("edge with no drawn endpoint");
+            rest.push_back(drawn[u] ? E{u, v} : E{v, u});
+            drawn[u] = drawn[v] = true;
+        }
+    return {d, rest};
+}
 
 int main(int argc, char** argv) {
-    if (argc < 3) {
-        std::cerr << "usage: " << argv[0] << " K n | B a b  [threads] [split] [iso] [lab]\n";
+    const auto t0 = std::chrono::steady_clock::now();
+    const std::vector<std::string> args(argv + 1, argv + argc);
+    if (args.size() < 2) {
+        std::cerr << "usage: " << argv[0] << " K n [minus u-v,...] | B a b   [threads] [iso]\n";
         return 2;
     }
-    const bool bip = std::string(argv[1]) == "B";
-    int ai = 2;
-    std::size_t a = std::stoul(argv[ai++]);
-    std::size_t b = bip ? std::stoul(argv[ai++]) : 0;
-    if (bip && a > b) std::swap(a, b);
-    std::size_t threads = argc > ai ? std::stoul(argv[ai]) : 1;
-    ++ai;
-    std::size_t split = argc > ai ? std::stoul(argv[ai]) : 2;
-    ++ai;
-    bool check_iso = false, check_lab = false;
-    for (int k = ai; k < argc; ++k) {
-        if (std::string(argv[k]) == "iso") check_iso = true;
-        if (std::string(argv[k]) == "lab") check_lab = true;
+    std::size_t n, i;   // i: index of the first optional argument
+    std::set<E> F;
+    std::string name;
+    if (args[0] == "B") {
+        std::size_t a = std::stoul(args[1]), b = std::stoul(args[2]);
+        if (a > b) std::swap(a, b);
+        n = a + b;
+        name = "K" + std::to_string(a) + "," + std::to_string(b);
+        auto big_side = [&](std::size_t v) { return 1 <= v && v <= b; };
+        for (std::size_t v = 1; v < n; ++v)
+            for (std::size_t u = 0; u < v; ++u)
+                if (big_side(u) == big_side(v)) F.insert({u, v});
+        i = 3;
+    } else {
+        n = std::stoul(args[1]);
+        name = "K" + std::to_string(n);
+        i = 2;
+        if (args.size() > 3 && args[2] == "minus") {   // a comma-separated list u-v,...
+            const std::string s = args[3] + ",";
+            for (std::size_t pos = 0, c; (c = s.find(',', pos)) != std::string::npos; pos = c + 1) {
+                const std::string t = s.substr(pos, c - pos);
+                F.insert(std::minmax(std::stoul(t.substr(0, t.find('-'))), std::stoul(t.substr(t.find('-') + 1))));
+            }
+            name += " minus " + args[3];
+            i = 4;
+        }
     }
-    const std::size_t n = bip ? a + b : a;
-    const std::string name = bip ? "K" + std::to_string(a) + "," + std::to_string(b) : "K" + std::to_string(n);
+    const std::size_t threads = args.size() > i ? std::stoul(args[i]) : 1;
+    const bool check_iso = args.size() > i + 1 && args[i + 1] == "iso";
 #ifdef QUASI
-    const std::string cls = "quasi(klim=" + std::to_string(klim) + ")";
+    const std::string cls = "quasiplane (at most " + std::to_string(KLIM) + " crossings per edge)";
 #else
-    const std::string cls = std::to_string(klim) + "-planar";
+    const std::string cls = std::to_string(KLIM) + "-plane";
 #endif
 
-    // edge list: star first, then the rest
-    Edges star, rest;
-    if (!bip) {
-        for (std::size_t v = 1; v < n; ++v) star.push_back({0, v});
-        for (std::size_t v = 2; v < n; ++v)
-            for (std::size_t u = 1; u < v; ++u) rest.push_back({u, v});
-    } else {
-        for (std::size_t j = 0; j < b; ++j) star.push_back({0, a + j});
-        for (std::size_t x = 1; x < a; ++x)
-            for (std::size_t j = 0; j < b; ++j) rest.push_back({a + j, x});
-    }
-    if (split > rest.size()) split = rest.size();
+    // the distinct images of F under the permutations of N(0)
+    std::vector<std::size_t> nb;
+    for (std::size_t v = 1; v < n; ++v)
+        if (!F.count({0, v})) nb.push_back(v);
+    std::set<std::set<E>> images;
+    std::vector<std::size_t> p = nb;   // nb[k] is mapped to p[k]
+    do {
+        std::vector<std::size_t> img(n);
+        for (std::size_t v = 0; v < n; ++v) img[v] = v;
+        for (std::size_t k = 0; k < nb.size(); ++k) img[nb[k]] = p[k];
+        std::set<E> f;
+        for (const auto& [u, v] : F) f.insert(std::minmax(img[u], img[v]));
+        images.insert(f);
+    } while (std::next_permutation(p.begin(), p.end()));
 
-    D d(n);
-    d.add_first_edge(star[0][0], star[0][1]);
-    for (std::size_t i = 1; i < star.size(); ++i) {
-        HdsPath p = d.first_path(star[i][0], star[i][1]);
-        if (p.empty()) throw std::runtime_error("star");
-        d.add_edge(p, star[i][1]);
-    }
-    std::cout << name << " " << cls << ": star of " << star.size() << " edges, " << rest.size()
-              << " further edges, threads " << threads << ", split " << split << (check_iso ? ", iso check" : "")
-              << (check_lab ? ", label check" : "") << std::endl;
-
-    uint64_t nodes0 = 0;
-    std::vector<D> partial;
-    draw_all<D>(d, rest, 0, split, nodes0, [&](D& p) { partial.push_back(p); });
-    std::cout << partial.size() << " partial drawings after " << split << " edges (" << now_s() << " s)" << std::endl;
-
-    std::vector<ClassTable<D>> tables(threads);
-    std::vector<uint64_t> nodes(threads, 0);
-    std::atomic<std::size_t> next(0), finished(0);
-    std::mutex out_mtx;
-    auto work = [&](std::size_t t) {
-        ClassTable<D>& T = tables[t];
-        T.check_iso = check_iso;
-        T.keep_hashes = check_lab;
-        for (std::size_t i = next++; i < partial.size(); i = next++) {
-            draw_all<D>(partial[i], rest, split, rest.size(), nodes[t], [&](D& f) { T.add(f); });
-            const std::size_t fin = ++finished;
-            if (fin % std::max<std::size_t>(1, partial.size() / 20) == 0) {
-                std::lock_guard<std::mutex> lk(out_mtx);
-                std::cout << "  progress " << fin << "/" << partial.size() << " (" << now_s() << " s)" << std::endl;
-            }
+    // tasks: the partial drawings after the star and the next `split` edges; many small tasks keep all threads busy
+    std::vector<D> tasks;
+    std::vector<std::vector<E>> task_rest;
+    for (std::size_t split = 0;; ++split) {
+        tasks.clear();
+        task_rest.clear();
+        bool all = true;   // split covers all remaining edges, for every image
+        for (const auto& f : images) {
+            auto [d, rest] = start(n, f);
+            const std::size_t s = std::min(split, rest.size());
+            all = all && s == rest.size();
+            draw_all(d, rest, 0, s, [&](D& x) {
+                tasks.push_back(x);
+                task_rest.emplace_back(rest.begin() + s, rest.end());
+            });
         }
-    };
-    std::vector<std::thread> th;
-    for (std::size_t t = 0; t < threads; ++t) th.emplace_back(work, t);
-    for (auto& x : th) x.join();
-    const double t_enum = now_s();
+        // take first split with enough tasks
+        if (threads == 1 || all || tasks.empty() || tasks.size() >= 1024 * threads) break;
+    }
 
-    // merge
-    uint64_t labelled = 0, iso_mismatch = 0, iso_calls = 0, total_nodes = nodes0;
-    std::unordered_map<Key, std::pair<bool, uint64_t>, KeyHash> classes;   // strong code -> (achiral, count)
-    std::unordered_map<Key, std::pair<std::size_t, std::size_t>, KeyHash> class_rep;   // strong code -> (table, rep)
-    std::unordered_set<Key, KeyHash> oriented;
-    std::vector<uint64_t> hashes;
-    for (std::size_t t = 0; t < threads; ++t) {
-        ClassTable<D>& T = tables[t];
+    // every thread keeps the strong codes it has seen, with a representative of each class if iso is checked
+    struct Table {
+        std::unordered_map<Key, std::size_t, KeyHash> classes;   // strong code -> index of the representative
+        std::vector<D> reps;
+        uint64_t labelled = 0, iso_mismatch = 0;
+    };
+    std::vector<Table> tables(threads);
+    std::atomic<std::size_t> next(0);
+    auto work = [&](Table& T) {
+        Canonizer<D> cz;
+        for (std::size_t t = next++; t < tasks.size(); t = next++)
+            draw_all(tasks[t], task_rest[t], 0, task_rest[t].size(), [&](D& d) {
+                ++T.labelled;
+                const Key k = fingerprint(cz.strong(d));
+                const auto it = T.classes.find(k);
+                if (it == T.classes.end()) {
+                    T.classes.emplace(k, T.reps.size());
+                    if (check_iso) T.reps.push_back(d);
+                } else if (check_iso && !are_isomorphic(T.reps[it->second], d)) {
+                    ++T.iso_mismatch;   // same code, but not isomorphic by iso.h
+                }
+            });
+    };
+    std::vector<std::thread> pool;
+    for (auto& T : tables) pool.emplace_back(work, std::ref(T));
+    for (auto& th : pool) th.join();
+
+    // merge the tables; with iso, also check that representatives of different classes are not isomorphic by iso.h
+    std::unordered_map<Key, const D*, KeyHash> classes;
+    uint64_t labelled = 0, iso_mismatch = 0;
+    for (const auto& T : tables) {
         labelled += T.labelled;
         iso_mismatch += T.iso_mismatch;
-        iso_calls += T.iso_calls;
-        total_nodes += nodes[t];
-        oriented.insert(T.oriented.begin(), T.oriented.end());
-        hashes.insert(hashes.end(), T.labelled_hashes.begin(), T.labelled_hashes.end());
-        for (auto& [code, inf] : T.classes) {
-            auto it = classes.find(code);
-            if (it == classes.end()) {
-                classes.emplace(code, std::make_pair(inf.achiral, inf.count));
-                if (check_iso) class_rep.emplace(code, std::make_pair(t, inf.rep));
-            } else {
-                it->second.second += inf.count;
-                if (check_iso) {   // same class found by two threads: iso.h must agree
-                    auto [t2, r2] = class_rep[code];
-                    ++iso_calls;
-                    if (!are_isomorphic(tables[t2].reps[r2], T.reps[inf.rep])) ++iso_mismatch;
-                }
-            }
+        for (const auto& [k, r] : T.classes) {
+            const auto [it, is_new] = classes.emplace(k, check_iso ? &T.reps[r] : nullptr);
+            if (!is_new && check_iso && !are_isomorphic(*it->second, T.reps[r])) ++iso_mismatch;
         }
     }
-    std::size_t achiral = 0;
-    for (auto& [code, x] : classes) achiral += x.first;
-    uint64_t dup_labelled = 0;
-    if (check_lab) {
-        std::sort(hashes.begin(), hashes.end());
-        for (std::size_t i = 1; i < hashes.size(); ++i) dup_labelled += (hashes[i] == hashes[i - 1]);
-    }
-    // negative cross-check: representatives of different classes must not be isomorphic by iso.h
-    uint64_t iso_neg_pairs = 0;
     if (check_iso) {
-        std::map<std::string, std::vector<const D*>> buckets;
-        for (auto& [code, tr] : class_rep) {
-            const D& r = tables[tr.first].reps[tr.second];
-            buckets[invariant(r)].push_back(&r);
+        std::map<std::vector<std::size_t>, std::vector<const D*>> by_crossings;   // sorted crossing numbers of the edges
+        for (const auto& [k, r] : classes) {
+            std::vector<std::size_t> c;
+            for (const auto& e : r->edges) c.push_back(e.ncr);
+            std::sort(c.begin(), c.end());
+            by_crossings[c].push_back(r);
         }
-        for (auto& [inv, v] : buckets)
-            for (std::size_t i = 0; i < v.size(); ++i)
-                for (std::size_t j = i + 1; j < v.size(); ++j) {
-                    ++iso_neg_pairs;
-                    ++iso_calls;
-                    if (are_isomorphic(*v[i], *v[j])) ++iso_mismatch;
-                }
+        for (const auto& [c, rs] : by_crossings)
+            for (std::size_t x = 0; x < rs.size(); ++x)
+                for (std::size_t y = x + 1; y < rs.size(); ++y) iso_mismatch += are_isomorphic(*rs[x], *rs[y]);
     }
-    const double t_all = now_s();
-    const std::size_t C = classes.size();
-    std::cout << "RESULT " << name << " " << cls << " strong=" << C << " achiral=" << achiral
-              << " oriented=" << oriented.size() << " (2C-A=" << 2 * C - achiral << ")"
-              << " labelled=" << labelled << " nodes=" << total_nodes;
-    if (check_lab) std::cout << " dup_labelled=" << dup_labelled;
-    if (check_iso)
-        std::cout << " iso_calls=" << iso_calls << " iso_neg_pairs=" << iso_neg_pairs << " iso_mismatch=" << iso_mismatch;
-    std::cout << " t_enum=" << t_enum << "s t_total=" << t_all << "s peak_mem=" << peak_mem_mb() << "MB"
-              << std::endl;
-    return 0;
+
+    const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    std::cout << name << ", simple " << cls << " drawings: " << classes.size() << " up to strong isomorphism ("
+              << labelled << " labelled drawings with the star at 0 fixed, " << images.size() << " image"
+              << (images.size() == 1 ? "" : "s") << " of the missing edges)";
+    if (check_iso) std::cout << ", iso.h mismatches: " << iso_mismatch;
+    std::cout << ", " << threads << " thread" << (threads == 1 ? "" : "s") << ", " << secs << " s" << std::endl;
+    return iso_mismatch == 0 ? 0 : 1;
 }
